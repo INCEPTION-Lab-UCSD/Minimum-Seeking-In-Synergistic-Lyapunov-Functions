@@ -64,12 +64,11 @@ def run_obstacle_avoidance():
         T_1,
         obstacle_center=obstacle_center,
     )
-    solution = simulation.solve()
 
-    fig, axes = simulation.plot(solution)
-
-    plt.show()
+    y = np.r_[simulation.p0, simulation.eta0, simulation.q0]
+    print(simulation.dynamics(0.0, y))
 
 
 if __name__ == "__main__":
+    # run_sphere_2d()
     run_obstacle_avoidance()
