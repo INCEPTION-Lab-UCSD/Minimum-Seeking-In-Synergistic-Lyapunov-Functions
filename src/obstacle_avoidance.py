@@ -1,9 +1,4 @@
-from itertools import product
-
-import matplotlib.pyplot as plt
 import numpy as np
-import sympy
-import torch
 from scipy.integrate import solve_ivp
 from scipy.linalg import expm
 
@@ -18,7 +13,7 @@ class Target_Seeking:
         self,
         z0,
         q0,
-        eta0,
+        oscillators,
         target,
         obstacle_radius,
         gamma,
@@ -29,14 +24,14 @@ class Target_Seeking:
         t_2,
         chi_1,
         chi_2,
-        T_1,
+        T_constraints,
         theta_schedule=None,
         obstacle_center=np.array([0.0, 0.0], dtype=float),
         theta_seed=None,
     ):
 
         self.q0 = q0
-        self.eta0 = eta0
+        self.oscillators = oscillators
         self.target = target
         self.obstacle_radius = obstacle_radius
         self.gamma = gamma
@@ -47,22 +42,29 @@ class Target_Seeking:
         self.t_2 = t_2
         self.chi_1 = chi_1
         self.chi_2 = chi_2
-        self.T_1 = T_1
-        self.obstacle_center = obstacle_center
+        self.T_constraints = T_constraints
+        self.obstacle_center = np.asarray(obstacle_center, dtype=float)
 
         self.p0 = self.diffeomorphism(z0)
 
         self.p_target = self.diffeomorphism(target)
 
         if theta_schedule is None:
-            self.theta_schedule = self.generate_theta_schedule()
+            self.theta_schedule = self.generate_theta_schedule(
+                self.t_1,
+                self.t_2,
+                self.chi_1,
+                self.chi_2,
+                self.T_1,
+                seed=theta_seed,
+            )
         else:
             self.theta_schedule = theta_schedule
 
     def control_gain(self, t):
-        return np.array([0.0, 1.0])
+
         if callable(self.theta_schedule):
-            return float(self.theta_schedule(t))
+            return self._input_vector(self.theta_schedule(t), "theta")
 
         if self.theta_schedule is not None:
             value = self.theta_schedule[0][1]
@@ -70,9 +72,9 @@ class Target_Seeking:
                 if t < switch_time:
                     break
                 value = candidate
-            return float(value)
+            return self._input_vector(value, "theta")
 
-        return self._default_control_gain(t)
+        return np.ones(2, dtype=float)
 
     def diffeomorphism(self, z):
         diff = z - self.obstacle_center
@@ -87,22 +89,6 @@ class Target_Seeking:
 
         radius = self.obstacle_radius + np.exp(radius)
         return self.obstacle_center + radius * unit_vec
-
-    def _diffeomorphism_torch(self, z):
-        center = torch.as_tensor(self.obstacle_center, dtype=z.dtype, device=z.device)
-        diff = z - center
-        norm = torch.linalg.norm(diff)
-        z_unit = diff / norm
-        log_term = torch.log(norm - self.obstacle_radius).unsqueeze(0)
-        return torch.cat([log_term, z_unit])
-
-    def diffeomorphism_jacobian(self, z):
-        z_tensor = torch.as_tensor(z, dtype=torch.float64)
-
-        jacobian = torch.autograd.functional.jacobian(
-            self._diffeomorphism_torch, z_tensor
-        )
-        return jacobian.detach().cpu().numpy()
 
     def potential_function(self, unit_vec):
         target_unit_vec = self.p_target[1:]
@@ -122,7 +108,7 @@ class Target_Seeking:
 
         return (
             0.5 * (radius - radius_target) ** 2
-            + np.sqrt(np.exp(radius) - np.exp(radius_target) ** 2 + 1)
+            + np.sqrt((np.exp(radius) - np.exp(radius_target)) ** 2 + 1)
             - 1
             + self.synergistic_potential_function(vartheta, q)
         )
@@ -133,12 +119,10 @@ class Target_Seeking:
         q = y[-1]
         b = self.control_vector_fields(p)
 
-        theta = np.asarray(self.control_gain(t), dtype=float).reshape(-1)
-        u = np.asarray(self.control(p, q, eta), dtype=float)
-        if u.ndim == 0:
-            u = np.full(theta.shape, float(u))
+        theta = self.control_gain(t)
+        u = self._input_vector(self.control(p, q, eta), "u")
 
-        p_dot = b @ (theta * u)
+        p_dot = np.sum(b * (theta * u), axis=1)
         eta_dot = 2.0 * np.pi * self.T_1**-1 * self.epsilon**-2 * (self.S @ eta)
         q_dot = 0.0
 
@@ -155,10 +139,10 @@ class Target_Seeking:
         y = np.r_[self.p0, self.eta0, self.q0]
         solution_segments = []
         while t < t_end - 1e-12:
-            y = self._apply_jump_if_needed(y)
+            y = self._apply_jump(y)
 
             def q_jump_event(_, event_y):
-                p = self._unit(event_y[:2])
+                p = event_y[:3]
                 q = self._mode(event_y)
                 return self.delta - self.synergy_gap(p, q)
 
@@ -198,18 +182,110 @@ class Target_Seeking:
         return gain * float(np.dot(direction, eta))
 
     def control_vector_fields(self, p):
-        # b = D gamma circ gamma_inv(p)
+        p = np.asarray(p, dtype=float)
+        rho = p[0]
+        vartheta = self._unit(p[1:])
+        radius = self.obstacle_radius + np.exp(rho)
 
-        # equivalent to using the unit vector approach
-        b = self.diffeomorphism_jacobian(self.diffeomorphism_inverse(p)) @ np.eye(2)
-        return b @ np.eye(b.shape[1])
+        b = np.empty((3, 2), dtype=float)
+        b[0, :] = np.exp(-rho) * vartheta
+        b[1:, :] = (np.eye(2) - np.outer(vartheta, vartheta)) / radius
+        return b
 
     def synergy_gap(self, p, q):
         values = [self.lyapunov_function(p, q_i) for q_i in self.Q]
         return self.lyapunov_function(p, q) - min(values)
 
-    def generate_theta_schedule(self):
-        return None
+    def _apply_jump(self, y):
+        p = y[:3]
+        q = y[-1]
+        if self.synergy_gap(p, q) >= self.delta:
+            return self.jump_map(y)
+        return y
+
+    @staticmethod
+    def generate_theta_schedule(
+        t_start,
+        t_end,
+        chi_1,
+        chi_2,
+        T_0,
+        initial_theta=1.0,
+        values=(-1.0, 0.0, 1.0),
+        seed=None,
+    ):
+        t_start = t_start
+        t_end = t_end
+        chi_1 = chi_1
+        chi_2 = chi_2
+        T_0 = float(T_0)
+        values = tuple(float(value) for value in values)
+        initial_theta = float(initial_theta)
+        min_dwell = 1.0 / chi_1
+        schedule = [(t_start, initial_theta)]
+        t = t_start
+        theta = initial_theta
+        last_nonzero = initial_theta if initial_theta != 0.0 else 1.0
+        monitor = T_0
+        rng = np.random.default_rng(seed) if seed is not None else None
+
+        while t < t_end - 1e-12:
+            remaining = t_end - t
+            segment_floor = min(min_dwell, remaining)
+            segment_ceiling = remaining
+
+            if theta == 0.0 and chi_2 < 1.0:
+                segment_ceiling = min(segment_ceiling, monitor / (1.0 - chi_2))
+            if segment_ceiling < segment_floor - 1e-12:
+                theta = -last_nonzero
+                schedule.append((t, theta))
+                continue
+            if remaining <= min_dwell + 1e-12:
+                duration = remaining
+            elif rng is None:
+                duration = segment_floor
+            else:
+                duration = rng.uniform(segment_floor, segment_ceiling)
+
+            if theta == 0.0:
+                monitor -= (1.0 - chi_2) * duration
+            else:
+                monitor = min(T_0, monitor + chi_2 * duration)
+                last_nonzero = theta
+            t += duration
+            if t >= t_end - 1e-12:
+                break
+
+            candidates = Target_Seeking._theta_candidates(
+                theta, last_nonzero, values, min(min_dwell, t_end - t), monitor, chi_2
+            )
+            theta = float(rng.choice(candidates)) if rng is not None else candidates[0]
+            schedule.append((t, theta))
+
+        return schedule
+
+    @staticmethod
+    def _theta_candidates(
+        theta, last_nonzero, values, required_duration, monitor, chi_2
+    ):
+        if theta == 0.0:
+            preferred = (-last_nonzero, last_nonzero)
+        else:
+            preferred = (0.0, -theta)
+
+        candidates = [
+            value for value in preferred if value in values and value != theta
+        ]
+        candidates.extend(
+            value for value in values if value != theta and value not in candidates
+        )
+
+        if chi_2 < 1.0:
+            zero_budget_required = (1.0 - chi_2) * required_duration
+            if monitor < zero_budget_required - 1e-12:
+                candidates = [value for value in candidates if value != 0.0]
+
+        return candidates
 
     def jump_map(self, y):
         y_plus = np.array(y, dtype=float).copy()
@@ -224,13 +300,16 @@ class Target_Seeking:
     def _unit(self, vector):
         return vector / np.linalg.norm(vector)
 
-    def _jump_check(self, p, q):
-        V = self.lyapunov_function(p, q)
-        V_min = np.min(
-            np.array([self.lyapunov_function(p, mode) for mode in self.Q], dtype=float)
-        )
-
-        return
+    @staticmethod
+    def _input_vector(value, name):
+        vector = np.asarray(value, dtype=float).reshape(-1)
+        if vector.size == 1:
+            return np.full(2, vector[0], dtype=float)
+        if vector.size != 2:
+            raise ValueError(
+                f"{name} must be scalar or length 2, got shape {vector.shape}"
+            )
+        return vector
 
     def _mode(self, y):
         q = y[-1]

@@ -65,8 +65,8 @@ def run_obstacle_avoidance():
         obstacle_center=obstacle_center,
     )
 
-    y = np.r_[simulation.p0, simulation.eta0, simulation.q0]
-    print(simulation.dynamics(0.0, y))
+    solution = simulation.solve()
+    print(solution(t_2))
 
 
 if __name__ == "__main__":
