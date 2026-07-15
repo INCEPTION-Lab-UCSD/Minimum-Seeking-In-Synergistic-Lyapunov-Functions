@@ -24,14 +24,16 @@ class Target_Seeking:
         t_2,
         chi_1,
         chi_2,
-        T_constraints,
+        T_0,
         theta_schedule=None,
         obstacle_center=np.array([0.0, 0.0], dtype=float),
         theta_seed=None,
+        T_1=1.0,
     ):
 
         self.q0 = q0
-        self.oscillators = oscillators
+        self.eta0 = self._unit(oscillators)
+        self.T_1 = float(T_1)
         self.target = target
         self.obstacle_radius = obstacle_radius
         self.gamma = gamma
@@ -42,7 +44,7 @@ class Target_Seeking:
         self.t_2 = t_2
         self.chi_1 = chi_1
         self.chi_2 = chi_2
-        self.T_constraints = T_constraints
+        self.T_0 = T_0
         self.obstacle_center = np.asarray(obstacle_center, dtype=float)
 
         self.p0 = self.diffeomorphism(z0)
@@ -50,14 +52,7 @@ class Target_Seeking:
         self.p_target = self.diffeomorphism(target)
 
         if theta_schedule is None:
-            self.theta_schedule = self.generate_theta_schedule(
-                self.t_1,
-                self.t_2,
-                self.chi_1,
-                self.chi_2,
-                self.T_1,
-                seed=theta_seed,
-            )
+            self.theta_schedule = self.generate_theta_schedule(seed=theta_seed)
         else:
             self.theta_schedule = theta_schedule
 
@@ -203,89 +198,75 @@ class Target_Seeking:
             return self.jump_map(y)
         return y
 
-    @staticmethod
     def generate_theta_schedule(
-        t_start,
-        t_end,
-        chi_1,
-        chi_2,
-        T_0,
-        initial_theta=1.0,
-        values=(-1.0, 0.0, 1.0),
-        seed=None,
+        self, initial_theta=(1.0, 1.0), values=(-1.0, 0.0, 1.0), seed=None
     ):
-        t_start = t_start
-        t_end = t_end
-        chi_1 = chi_1
-        chi_2 = chi_2
-        T_0 = float(T_0)
+        t_start = float(self.t_1)
+        t_end = float(self.t_2)
+        chi_1 = float(self.chi_1)
+        chi_2 = float(self.chi_2)
+        T_0 = float(self.T_0)
         values = tuple(float(value) for value in values)
-        initial_theta = float(initial_theta)
+        theta = tuple(float(value) for value in initial_theta)
+
         min_dwell = 1.0 / chi_1
-        schedule = [(t_start, initial_theta)]
+        schedule = [(t_start, theta)]
         t = t_start
-        theta = initial_theta
-        last_nonzero = initial_theta if initial_theta != 0.0 else 1.0
         monitor = T_0
-        rng = np.random.default_rng(seed) if seed is not None else None
+        rng = np.random.default_rng(seed)
 
         while t < t_end - 1e-12:
             remaining = t_end - t
-            segment_floor = min(min_dwell, remaining)
-            segment_ceiling = remaining
+            duration = min(min_dwell, remaining)
 
-            if theta == 0.0 and chi_2 < 1.0:
-                segment_ceiling = min(segment_ceiling, monitor / (1.0 - chi_2))
-            if segment_ceiling < segment_floor - 1e-12:
-                theta = -last_nonzero
-                schedule.append((t, theta))
-                continue
-            if remaining <= min_dwell + 1e-12:
-                duration = remaining
-            elif rng is None:
-                duration = segment_floor
-            else:
-                duration = rng.uniform(segment_floor, segment_ceiling)
-
-            if theta == 0.0:
+            if self._theta_has_zero(theta):
+                duration = min(duration, monitor / (1.0 - chi_2))
                 monitor -= (1.0 - chi_2) * duration
             else:
                 monitor = min(T_0, monitor + chi_2 * duration)
-                last_nonzero = theta
+
             t += duration
             if t >= t_end - 1e-12:
                 break
 
-            candidates = Target_Seeking._theta_candidates(
-                theta, last_nonzero, values, min(min_dwell, t_end - t), monitor, chi_2
+            required_duration = min(min_dwell, t_end - t)
+            candidates = self._theta_candidates(
+                theta, values, required_duration, monitor, chi_2
             )
-            theta = float(rng.choice(candidates)) if rng is not None else candidates[0]
+            theta = tuple(candidates[rng.integers(len(candidates))])
             schedule.append((t, theta))
 
         return schedule
 
-    @staticmethod
-    def _theta_candidates(
-        theta, last_nonzero, values, required_duration, monitor, chi_2
-    ):
-        if theta == 0.0:
-            preferred = (-last_nonzero, last_nonzero)
-        else:
-            preferred = (0.0, -theta)
-
+    @classmethod
+    def _theta_candidates(cls, theta, values, required_duration, monitor, chi_2):
         candidates = [
-            value for value in preferred if value in values and value != theta
+            candidate
+            for candidate in cls._theta_space(values, len(theta))
+            if candidate != theta
         ]
-        candidates.extend(
-            value for value in values if value != theta and value not in candidates
-        )
 
-        if chi_2 < 1.0:
-            zero_budget_required = (1.0 - chi_2) * required_duration
-            if monitor < zero_budget_required - 1e-12:
-                candidates = [value for value in candidates if value != 0.0]
+        zero_budget_required = (1.0 - chi_2) * required_duration
+        if monitor < zero_budget_required - 1e-12:
+            candidates = [
+                candidate
+                for candidate in candidates
+                if not cls._theta_has_zero(candidate)
+            ]
 
         return candidates
+
+    @staticmethod
+    def _theta_space(values, dimension):
+        if dimension == 0:
+            return [()]
+
+        tails = Target_Seeking._theta_space(values, dimension - 1)
+        return [(value, *tail) for value in values for tail in tails]
+
+    @staticmethod
+    def _theta_has_zero(theta):
+        return any(np.isclose(value, 0.0) for value in theta)
 
     def jump_map(self, y):
         y_plus = np.array(y, dtype=float).copy()

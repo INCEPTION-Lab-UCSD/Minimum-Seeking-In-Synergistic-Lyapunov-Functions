@@ -40,12 +40,12 @@ def run_obstacle_avoidance():
     epsilon = 1 / np.sqrt(6 * np.pi)
     gamma = 2.0
     chi_1 = 1.0
-    chi_2 = 1.0
+    chi_2 = 0.5
     t_1 = 0.0
     t_2 = 40.0
     delta = 0.25
     kappa = 4.0
-    T_1 = 1.0
+    T_0 = 1.0
 
     simulation = obstacle_avoidance.Target_Seeking(
         z0,
@@ -61,12 +61,16 @@ def run_obstacle_avoidance():
         t_2,
         chi_1,
         chi_2,
-        T_1,
+        T_0,
         obstacle_center=obstacle_center,
+        theta_seed=0,
     )
 
+    print(simulation.theta_schedule)
+
     solution = simulation.solve()
-    print(solution(t_2))
+    final_p = solution(t_2)[:3]
+    print(simulation.diffeomorphism_inverse(final_p))
 
 
 if __name__ == "__main__":
