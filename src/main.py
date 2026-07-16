@@ -6,6 +6,7 @@ import numpy as np
 import hybrid_solution
 import obstacle_avoidance
 import sphere_2d
+import sphere_3d
 
 
 def run_sphere_2d():
@@ -73,6 +74,42 @@ def run_obstacle_avoidance():
     print(simulation.diffeomorphism_inverse(final_p))
 
 
+def run_sphere_3d():
+    control_gains_constants = np.array([3.0, 2.0, 1.0])
+    target = np.array([0, 0, 1], dtype=float)
+    gamma = 1.0
+    kappa = 4.0
+    delta = 0.2
+    epsilon = 1 / np.sqrt(8 * np.pi)
+
+    p0 = np.array([0, 0, -1], dtype=float)
+    eta0 = np.array([1, 0, 0], dtype=float)
+    q0 = 1
+    t_1 = 0.0
+    t_2 = 10.0
+    chi_1 = 1.0
+    chi_2 = 0.5
+
+    simulation = sphere_3d.Sphere_3D(
+        p0,
+        eta0,
+        q0,
+        target,
+        gamma,
+        delta,
+        kappa,
+        epsilon,
+        t_1,
+        t_2,
+        chi_1,
+        chi_2,
+        control_gains_constants,
+    )
+
+    solution = simulation.solve()
+
+
 if __name__ == "__main__":
     # run_sphere_2d()
-    run_obstacle_avoidance()
+    # run_obstacle_avoidance()
+    run_sphere_3d()
