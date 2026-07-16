@@ -119,13 +119,12 @@ class Sphere_3D:
         return np.r_[p_dot, eta_dot, q]
 
     def get_control_gain(self, t):
-        for i in range(len(self.theta_schedule) - 1):
-            segment_start_time = self.theta_schedule[i][0]
-            next_segment_start_time = self.theta_schedule[i + 1][0]
-            if t >= segment_start_time and t < next_segment_start_time:
-                return self.theta_schedule[i][1]
-
-        ValueError("t is not in range")
+        theta = self.theta_schedule[0][1]
+        for switch_time, candidate in self.theta_schedule:
+            if t < switch_time:
+                break
+            theta = candidate
+        return theta
 
     def lyapunov_function(self, p, q):
         return self.potential_function(self.synergistic_potential_function(p, q))
@@ -213,7 +212,7 @@ class Sphere_3D:
 
             required_duration = min(min_dwell, t_end - t)
             candidates = self._theta_candidates(
-                theta, values, required_duration, monitor, chi_2
+                theta, values, required_duration, monitor, chi_1, chi_2
             )
             theta = tuple(candidates[rng.integers(len(candidates))])
             schedule.append((t, theta))
@@ -227,8 +226,7 @@ class Sphere_3D:
             return self.jump_map(y)
         return y
 
-    @classmethod
-    def _theta_candidates(cls, theta, values, required_duration, monitor, chi_2):
+    def _theta_candidates(self, cls, theta, values, required_duration, monitor, chi_2):
         candidates = [
             candidate
             for candidate in cls._theta_space(values, len(theta))
@@ -250,11 +248,11 @@ class Sphere_3D:
         if dimension == 0:
             return [()]
 
-        tails = Target_Seeking._theta_space(values, dimension - 1)
+        tails = Sphere_3D._theta_space(values, dimension - 1)
         return [(value, *tail) for value in values for tail in tails]
 
     def _theta_has_zero(self, theta):
-        return np.any(np.isclose(value, 0.0) for value in theta)
+        return np.any([np.isclose(value, 0.0) for value in theta])
 
     def _skew_symmetric(self, arr):
         a, b, c = arr[0], arr[1], arr[2]
