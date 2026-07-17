@@ -96,6 +96,8 @@ class Sphere_3D:
             t = float(sol.t[-1])
             y = self.jump_map(sol.y[:, -1])
 
+        return HybridSolution(solution_segments)
+
     def dynamics(self, t, y):
         p = y[:3]
         eta = y[3:-1]
