@@ -1,6 +1,8 @@
 from itertools import product
 
 import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+from matplotlib.patches import FancyArrowPatch
 import numpy as np
 from scipy.integrate import solve_ivp
 from scipy.linalg import expm
@@ -285,29 +287,129 @@ class Sphere_2D:
         theta = np.array([self.control_gain(t_i) for t_i in t])
 
         fig = plt.figure(figsize=(10, 4))
-        ax_traj = fig.add_subplot(1, 2, 1, projection="3d")
-        ax_theta = fig.add_subplot(1, 2, 2)
+        ax_unit_circle = fig.add_subplot()
 
-        ax_traj.plot(t, p_1, p_2, color="tab:red", linewidth=1.5)
-        ax_traj.scatter(
-            [t[-1]], [self.p_target[0]], [self.p_target[1]], color="black", s=30
+        theta = np.linspace(0.0, 2 * np.pi, 200)
+
+        circle_x = np.cos(theta)
+        circle_y = np.sin(theta)
+        ax_unit_circle.plot(circle_x, circle_y, color="black")
+        ax_unit_circle.scatter(p_1[-1], p_2[-1], color="red")
+
+        return fig, ax_unit_circle
+
+    def animate(self, solution, frame_step=25, interval=40, repeat_delay=1200):
+        frame_step = int(frame_step)
+        if frame_step < 1:
+            raise ValueError("frame_step must be a positive integer")
+
+        frames = np.arange(0, len(solution.t), frame_step)
+        if frames[-1] != len(solution.t) - 1:
+            frames = np.r_[frames, len(solution.t) - 1]
+
+        fig, ax_unit_circle = plt.subplots(figsize=(7, 7))
+        artists = self._setup_unit_circle_ax(ax_unit_circle)
+
+        def update(frame_idx):
+            t = solution.t[frame_idx]
+            y = solution.y[:, frame_idx]
+            p = self._unit(y[:2])
+            q = self._mode(y)
+            v = self.lyapunov_function(p, q)
+            direction = self._unit(expm(-self.kappa * v * self.S) @ self.e1)
+
+            artists["point_radius"].set_data([0.0, p[0]], [0.0, p[1]])
+            artists["point"].set_data([p[0]], [p[1]])
+            artists["direction_arrow"].set_positions((0.0, 0.0), direction)
+            artists["direction"].set_data([direction[0]], [direction[1]])
+            artists["status"].set_text(
+                f"t = {t:.2f}\nq = {q}\ntheta = {self.control_gain(t):.0f}"
+            )
+            return tuple(artists.values())
+
+        update(frames[0])
+        animation = FuncAnimation(
+            fig,
+            update,
+            frames=frames,
+            interval=interval,
+            repeat_delay=repeat_delay,
         )
-        ax_traj.set_xlabel("Time")
-        ax_traj.set_ylabel("$p_1$")
-        ax_traj.set_zlabel("$p_2$")
-        ax_traj.set_ylim(-1.05, 1.05)
-        ax_traj.set_zlim(-1.05, 1.05)
-
-        ax_theta.step(theta, t, where="post", color="black", linewidth=1.5)
-        ax_theta.set_xlabel(r"$\theta_1$")
-        ax_theta.set_ylabel("Time")
-        ax_theta.set_xlim(-1.2, 1.2)
-        ax_theta.set_ylim(t[0], t[-1])
-        ax_theta.set_xticks([-1, 0, 1])
-        ax_theta.grid(True, alpha=0.25)
-
         fig.tight_layout()
-        return fig, (ax_traj, ax_theta)
+        return fig, animation
+
+    def _setup_unit_circle_ax(self, ax, point_color="tab:red"):
+        theta = np.linspace(0.0, 2.0 * np.pi, 400)
+        ax.plot(np.cos(theta), np.sin(theta), color="black", linewidth=1.5)
+        ax.axhline(0.0, color="0.82", linewidth=0.8)
+        ax.axvline(0.0, color="0.82", linewidth=0.8)
+        ax.scatter(
+            self.p_target[0],
+            self.p_target[1],
+            color="black",
+            marker="*",
+            s=110,
+            label="target",
+            zorder=4,
+        )
+
+        (point_radius,) = ax.plot([], [], color=point_color, linewidth=1.1, alpha=0.35)
+        direction_arrow = FancyArrowPatch(
+            (0.0, 0.0),
+            (0.0, 0.0),
+            arrowstyle="-|>",
+            color="tab:orange",
+            mutation_scale=16,
+            linewidth=2.0,
+            alpha=0.85,
+            label="direction",
+        )
+        ax.add_patch(direction_arrow)
+        (point,) = ax.plot(
+            [],
+            [],
+            marker="o",
+            color=point_color,
+            markersize=9,
+            linestyle="none",
+            label="point",
+            zorder=5,
+        )
+        (direction,) = ax.plot(
+            [],
+            [],
+            marker="o",
+            color="tab:orange",
+            markersize=8,
+            linestyle="none",
+            zorder=5,
+        )
+        status = ax.text(
+            0.03,
+            0.97,
+            "",
+            transform=ax.transAxes,
+            ha="left",
+            va="top",
+            family="monospace",
+        )
+
+        ax.set_title("Sphere 2D on the Unit Circle")
+        ax.set_xlabel("$p_1$")
+        ax.set_ylabel("$p_2$")
+        ax.set_aspect("equal", adjustable="box")
+        ax.set_xlim(-1.15, 1.15)
+        ax.set_ylim(-1.15, 1.15)
+        ax.grid(True, alpha=0.18)
+        ax.legend(loc="lower right", frameon=False)
+
+        return {
+            "point_radius": point_radius,
+            "direction_arrow": direction_arrow,
+            "point": point,
+            "direction": direction,
+            "status": status,
+        }
 
     def _apply_jump_if_needed(self, y):
         if self.synergy_gap(y[:2], self._mode(y)) >= self.delta:

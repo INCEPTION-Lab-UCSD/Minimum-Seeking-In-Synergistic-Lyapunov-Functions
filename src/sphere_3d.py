@@ -1,6 +1,3 @@
-from itertools import product
-
-import matplotlib.pyplot as plt
 import numpy as np
 from scipy.integrate import solve_ivp
 from scipy.linalg import expm
@@ -9,7 +6,9 @@ from hybrid_solution import HybridSolution
 
 
 class Sphere_3D:
-    Q = {1, 2}
+    """Simulation of the S2 example with three two-state oscillators."""
+
+    Q = (1, 2)
     e1 = np.array([1, 0, 0], dtype=float)
     e2 = np.array([0, 1, 0], dtype=float)
     e3 = np.array([0, 0, 1], dtype=float)
@@ -35,24 +34,37 @@ class Sphere_3D:
         theta_seed=None,
     ):
 
-        self.p0 = p0
-        self.eta0 = eta0
-        self.q0 = q0
-        self.target = target
-        self.delta = delta
-        self.gamma = gamma
-        self.kappa = kappa
-        self.epsilon = epsilon
-        self.t_1 = t_1
-        self.t_2 = t_2
-        self.chi_1 = chi_1
-        self.chi_2 = chi_2
-        self.T_0 = T_0
-        self.control_gain_constants = control_gain_constants
+        self.p0 = self._unit(p0)
+        self.target = self._unit(target)
+        self.q0 = self._mode_value(q0)
+        self.delta = float(delta)
+        self.gamma = float(gamma)
+        self.kappa = float(kappa)
+        self.epsilon = float(epsilon)
+        self.t_1 = float(t_1)
+        self.t_2 = float(t_2)
+        self.chi_1 = float(chi_1)
+        self.chi_2 = float(chi_2)
+        self.T_0 = float(T_0)
+        self.control_gain_constants = np.asarray(
+            control_gain_constants, dtype=float
+        ).reshape(-1)
+        if self.control_gain_constants.shape != (3,):
+            raise ValueError("control_gain_constants must contain three periods")
+        if np.any(self.control_gain_constants <= 0.0):
+            raise ValueError("oscillator periods must be positive")
+
+        eta0 = np.asarray(eta0, dtype=float)
+        if eta0.size != 6:
+            raise ValueError("eta0 must contain three two-dimensional oscillators")
+        self.eta0 = self._unit_rows(eta0.reshape(3, 2)).reshape(-1)
+
+        axis = np.eye(3)[np.argmin(np.abs(self.target))]
+        self.target_orthogonal = self._unit(np.cross(self.target, axis))
         self.values = (-1.0, 0.0, 1.0)
 
         if theta_schedule is None:
-            self.theta_schedule = self.generate_theta_schedule()
+            self.theta_schedule = self.generate_theta_schedule(seed=theta_seed)
         else:
             self.theta_schedule = theta_schedule
 
@@ -69,12 +81,11 @@ class Sphere_3D:
             y = self._apply_jump(y)
 
             def q_jump_event(_, event_y):
-                p = event_y[:3]
-                eta = event_y[3:-1]
-                q = event_y[-1]
+                p = self._unit(event_y[:3])
+                q = self._mode(event_y)
                 return self.delta - self.synergy_gap(p, q)
 
-            q_jump_event.termainl = True
+            q_jump_event.terminal = True
             q_jump_event.direction = -1
 
             sol = solve_ivp(
@@ -84,7 +95,7 @@ class Sphere_3D:
                 method="RK45",
                 rtol=rtol,
                 atol=atol,
-                dense_ouput=True,
+                dense_output=True,
                 events=q_jump_event,
             )
 
@@ -99,56 +110,52 @@ class Sphere_3D:
         return HybridSolution(solution_segments)
 
     def dynamics(self, t, y):
-        p = y[:3]
-        eta = y[3:-1]
-        q = y[-1]
-        p_dot = np.empty_like(p)
-        for idx, theta in enumerate(self.get_control_gain(t)):
-            p_dot += self.control_vector_fields(p, idx) * theta
+        p = self._unit(y[:3])
+        eta = y[3:-1].reshape(3, 2)
+        q = self._mode(y)
 
-        eta_dot = np.empty_like(eta)
-        eta_dot = (
+        theta = self.get_control_gain(t)
+        u = self.control(p, q, self._unit_rows(eta))
+        vector_fields = np.column_stack(
+            [self.control_vector_fields(p, idx) for idx in range(3)]
+        )
+        p_dot = vector_fields @ (theta * u)
+
+        frequencies = (
             2.0
             * np.pi
             * self.control_gain_constants**-1
             * self.epsilon**-2
-            * (self.S @ eta)
         )
+        eta_dot = frequencies[:, np.newaxis] * (self.S @ eta.T).T
+        q_dot = 0.0
 
-        for idx, T_i in enumerate(self.control_gain_constants):
-            eta_dot[idx] = 2.0 * np.pi * T_i**-1 * self.epsilon**-2 * (self.S @ eta)
-
-        return np.r_[p_dot, eta_dot, q]
+        return np.r_[p_dot, eta_dot.reshape(-1), q_dot]
 
     def get_control_gain(self, t):
+        if callable(self.theta_schedule):
+            return self._control_gain_vector(self.theta_schedule(t))
+
         theta = self.theta_schedule[0][1]
         for switch_time, candidate in self.theta_schedule:
             if t < switch_time:
                 break
             theta = candidate
-        return theta
+        return self._control_gain_vector(theta)
 
     def lyapunov_function(self, p, q):
         return self.potential_function(self.synergistic_potential_function(p, q))
 
     def potential_function(self, p):
-        return 1 - np.dot(p, self.target)
+        return 1.0 - float(np.dot(p, self.target))
 
     def synergistic_potential_function(self, p, q):
-        target_orthogonal = (
-            np.cross(self.target, self.e1)
-            if np.allclose(self.target, self.e2)
-            else np.cross(self.target, self.e2)
+        rotation = expm(
+            (1.5 - q)
+            * self.potential_function(p)
+            * self._skew_symmetric(self.target_orthogonal)
         )
-
-        return (
-            expm(
-                (3 / 2 - q)
-                * self.potential_function(p)
-                @ self._skew_symmetric(target_orthogonal)
-            )
-            @ p
-        )
+        return rotation @ p
 
     def control_vector_fields(self, p, idx):
         e_i = np.eye(3)[idx]
@@ -164,7 +171,7 @@ class Sphere_3D:
             (4.0 * np.pi * self.gamma) / (self.control_gain_constants * self.kappa)
         )
 
-        return gain * float(np.dot(direction, eta))
+        return gain * (eta @ direction)
 
     def synergy_gap(self, p, q):
         values = [self.lyapunov_function(p, q_i) for q_i in self.Q]
@@ -173,6 +180,9 @@ class Sphere_3D:
     def jump_map(self, y):
         y_plus = np.array(y, dtype=float).copy()
         p = y_plus[:3]
+        eta = y_plus[3:-1].reshape(3, 2)
+        y_plus[:3] = self._unit(p)
+        y_plus[3:-1] = self._unit_rows(eta).reshape(-1)
         y_plus[-1] = self.argmin_mode(p)
 
         return y_plus
@@ -214,7 +224,7 @@ class Sphere_3D:
 
             required_duration = min(min_dwell, t_end - t)
             candidates = self._theta_candidates(
-                theta, values, required_duration, monitor, chi_1, chi_2
+                theta, values, required_duration, monitor, chi_2
             )
             theta = tuple(candidates[rng.integers(len(candidates))])
             schedule.append((t, theta))
@@ -222,13 +232,14 @@ class Sphere_3D:
         return schedule
 
     def _apply_jump(self, y):
-        p = y[:3]
-        q = y[-1]
+        p = self._unit(y[:3])
+        q = self._mode(y)
         if self.synergy_gap(p, q) >= self.delta:
             return self.jump_map(y)
         return y
 
-    def _theta_candidates(self, cls, theta, values, required_duration, monitor, chi_2):
+    @classmethod
+    def _theta_candidates(cls, theta, values, required_duration, monitor, chi_2):
         candidates = [
             candidate
             for candidate in cls._theta_space(values, len(theta))
@@ -253,9 +264,43 @@ class Sphere_3D:
         tails = Sphere_3D._theta_space(values, dimension - 1)
         return [(value, *tail) for value in values for tail in tails]
 
-    def _theta_has_zero(self, theta):
+    @staticmethod
+    def _theta_has_zero(theta):
         return np.any([np.isclose(value, 0.0) for value in theta])
 
-    def _skew_symmetric(self, arr):
-        a, b, c = arr[0], arr[1], arr[2]
-        return np.array([[0, a, b], [-a, 0, c], [-b, -c, 0]])
+    @staticmethod
+    def _skew_symmetric(arr):
+        a, b, c = arr
+        return np.array([[0.0, -c, b], [c, 0.0, -a], [-b, a, 0.0]])
+
+    @staticmethod
+    def _unit(vector):
+        vector = np.asarray(vector, dtype=float)
+        norm = np.linalg.norm(vector)
+        if np.isclose(norm, 0.0):
+            raise ValueError("cannot normalize a zero vector")
+        return vector / norm
+
+    @classmethod
+    def _unit_rows(cls, vectors):
+        return np.vstack([cls._unit(vector) for vector in vectors])
+
+    @classmethod
+    def _mode_value(cls, q):
+        mode = int(round(float(np.asarray(q).reshape(-1)[0])))
+        if mode not in cls.Q:
+            raise ValueError(f"q must be one of {cls.Q}")
+        return mode
+
+    @classmethod
+    def _mode(cls, y):
+        return cls._mode_value(y[-1])
+
+    @staticmethod
+    def _control_gain_vector(theta):
+        vector = np.asarray(theta, dtype=float).reshape(-1)
+        if vector.size == 1:
+            return np.full(3, vector[0], dtype=float)
+        if vector.size != 3:
+            raise ValueError("theta must be scalar or length 3")
+        return vector

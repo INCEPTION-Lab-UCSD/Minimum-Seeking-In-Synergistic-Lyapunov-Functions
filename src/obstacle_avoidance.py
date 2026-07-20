@@ -1,8 +1,25 @@
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+from matplotlib.patches import Circle, Polygon
+from matplotlib.transforms import Affine2D
 import numpy as np
 from scipy.integrate import solve_ivp
 from scipy.linalg import expm
 
 from hybrid_solution import HybridSolution
+
+
+CHARCOAL_THEME = {
+    "figure": "#111318",
+    "axes": "#181B22",
+    "text": "#E8EAED",
+    "grid": "#3A3F4B",
+    "trajectory": "#FF4D4D",
+    "initial": "#E8EAED",
+    "target": "#6EE7B7",
+    "edge": "#111318",
+    "cmap": "viridis",
+}
 
 
 class Target_Seeking:
@@ -79,11 +96,16 @@ class Target_Seeking:
 
     def diffeomorphism_inverse(self, p):
         p = np.asarray(p)
-        radius = p[0]
-        unit_vec = self._unit(p[1:])
+        if p.ndim == 1:
+            radius = p[0]
+            unit_vec = self._unit(p[1:])
 
-        radius = self.obstacle_radius + np.exp(radius)
-        return self.obstacle_center + radius * unit_vec
+            radius = self.obstacle_radius + np.exp(radius)
+            return self.obstacle_center + radius * unit_vec
+
+        radius = self.obstacle_radius + np.exp(p[0])
+        unit_vec = p[1:] / np.linalg.norm(p[1:], axis=0)
+        return self.obstacle_center[:, np.newaxis] + radius * unit_vec
 
     def potential_function(self, unit_vec):
         target_unit_vec = self.p_target[1:]
@@ -174,7 +196,13 @@ class Target_Seeking:
             (4.0 * np.pi * self.gamma) / (self.T_1 * self.kappa)
         )
 
-        return gain * float(np.dot(direction, eta))
+        # Drive the two planar inputs from one oscillator in quadrature.
+        return gain * np.array(
+            [
+                np.dot(direction, eta),
+                np.dot(direction, self.S @ eta),
+            ]
+        )
 
     def control_vector_fields(self, p):
         p = np.asarray(p, dtype=float)
@@ -237,6 +265,277 @@ class Target_Seeking:
             schedule.append((t, theta))
 
         return schedule
+
+    def plot_obstacle_avoidance(self, solution):
+        p = solution.y[:3]
+        z = self.diffeomorphism_inverse(p)
+
+        fig, ax = plt.subplots(figsize=(7, 7))
+        self._style_obstacle_axis(fig, ax, z)
+        boulder = self._create_boulder_patch(label="boulder")
+        ax.add_patch(boulder)
+
+        ax.plot(
+            z[0],
+            z[1],
+            color=CHARCOAL_THEME["trajectory"],
+            linewidth=2.0,
+            label="trajectory",
+        )
+        ax.scatter(
+            z[0, 0],
+            z[1, 0],
+            facecolor=CHARCOAL_THEME["initial"],
+            edgecolor=CHARCOAL_THEME["edge"],
+            linewidth=1.2,
+            s=70,
+            label="start",
+            zorder=4,
+        )
+        ax.scatter(
+            z[0, -1],
+            z[1, -1],
+            facecolor=CHARCOAL_THEME["target"],
+            edgecolor=CHARCOAL_THEME["edge"],
+            linewidth=1.2,
+            s=70,
+            label="end",
+            zorder=4,
+        )
+        ax.scatter(
+            self.target[0],
+            self.target[1],
+            facecolor=CHARCOAL_THEME["target"],
+            edgecolor=CHARCOAL_THEME["edge"],
+            linewidth=1.0,
+            marker="*",
+            s=120,
+            label="target",
+            zorder=4,
+        )
+
+        legend = ax.legend(loc="best", frameon=False)
+        for text in legend.get_texts():
+            text.set_color(CHARCOAL_THEME["text"])
+        fig.tight_layout()
+        return fig, ax
+
+    def animate_obstacle_avoidance(
+        self, solution, frame_count=240, interval=40, repeat_delay=1200
+    ):
+        frame_count = int(frame_count)
+        if frame_count < 2:
+            raise ValueError("frame_count must be at least 2")
+
+        t_frames = np.linspace(solution.t[0], solution.t[-1], frame_count)
+        z = self.diffeomorphism_inverse(solution(t_frames)[:3])
+        z_full = self.diffeomorphism_inverse(solution.y[:3])
+
+        fig, ax = plt.subplots(figsize=(7, 7))
+        self._style_obstacle_axis(fig, ax, z_full)
+        ax.add_patch(self._create_boulder_patch(label="boulder"))
+
+        ax.scatter(
+            z[0, 0],
+            z[1, 0],
+            facecolor=CHARCOAL_THEME["initial"],
+            edgecolor=CHARCOAL_THEME["edge"],
+            linewidth=1.2,
+            s=80,
+            label="start",
+            zorder=4,
+        )
+        ax.scatter(
+            z[0, -1],
+            z[1, -1],
+            facecolor=CHARCOAL_THEME["target"],
+            edgecolor=CHARCOAL_THEME["edge"],
+            linewidth=1.2,
+            s=80,
+            label="end",
+            zorder=4,
+        )
+
+        drone_scale = 0.22
+        drone_artists = self._create_drone_artists(ax, scale=drone_scale)
+        status = ax.text(
+            0.03,
+            0.97,
+            "",
+            transform=ax.transAxes,
+            ha="left",
+            va="top",
+            color=CHARCOAL_THEME["text"],
+            family="monospace",
+        )
+
+        legend = ax.legend(loc="best", frameon=False)
+        for text in legend.get_texts():
+            text.set_color(CHARCOAL_THEME["text"])
+
+        def update(frame_idx):
+            x = z[0, frame_idx]
+            y = z[1, frame_idx]
+            if frame_idx < z.shape[1] - 1:
+                direction = z[:, frame_idx + 1] - z[:, frame_idx]
+            else:
+                direction = z[:, frame_idx] - z[:, frame_idx - 1]
+            angle = np.arctan2(direction[1], direction[0])
+            self._position_drone_artists(drone_artists, x, y, angle, drone_scale)
+            status.set_text(f"t = {t_frames[frame_idx]:.2f}")
+            return (*drone_artists, status)
+
+        update(0)
+        animation = FuncAnimation(
+            fig,
+            update,
+            frames=np.arange(len(t_frames)),
+            interval=interval,
+            repeat_delay=repeat_delay,
+            blit=True,
+        )
+        fig.tight_layout()
+        return fig, animation
+
+    def _style_obstacle_axis(self, fig, ax, z):
+        fig.patch.set_facecolor(CHARCOAL_THEME["figure"])
+        ax.set_facecolor(CHARCOAL_THEME["axes"])
+        for spine in ax.spines.values():
+            spine.set_color(CHARCOAL_THEME["grid"])
+
+        ax.tick_params(colors=CHARCOAL_THEME["text"])
+        ax.xaxis.label.set_color(CHARCOAL_THEME["text"])
+        ax.yaxis.label.set_color(CHARCOAL_THEME["text"])
+        ax.title.set_color(CHARCOAL_THEME["text"])
+        ax.grid(True, color=CHARCOAL_THEME["grid"], alpha=0.45, linewidth=0.8)
+
+        margin = 0.75
+        x_values = np.r_[z[0], self.target[0], self.obstacle_center[0]]
+        y_values = np.r_[z[1], self.target[1], self.obstacle_center[1]]
+        ax.set_xlim(
+            min(x_values.min(), self.obstacle_center[0] - self.obstacle_radius)
+            - margin,
+            max(x_values.max(), self.obstacle_center[0] + self.obstacle_radius)
+            + margin,
+        )
+        ax.set_ylim(
+            min(y_values.min(), self.obstacle_center[1] - self.obstacle_radius)
+            - margin,
+            max(y_values.max(), self.obstacle_center[1] + self.obstacle_radius)
+            + margin,
+        )
+
+        ax.set_title("Obstacle Avoidance")
+        ax.set_xlabel("$z_1$")
+        ax.set_ylabel("$z_2$")
+        ax.set_aspect("equal", adjustable="box")
+
+    def _create_boulder_patch(self, label=None):
+        angles = np.linspace(0.0, 2.0 * np.pi, 18, endpoint=False)
+        radial_jitter = np.array(
+            [
+                0.99,
+                0.89,
+                1.00,
+                0.96,
+                0.98,
+                0.91,
+                0.99,
+                0.93,
+                0.97,
+                0.87,
+                1.00,
+                0.95,
+                0.99,
+                0.90,
+                0.98,
+                0.94,
+                1.00,
+                0.92,
+            ]
+        )
+        radii = self.obstacle_radius * radial_jitter
+        vertices = self.obstacle_center + np.column_stack(
+            [radii * np.cos(angles), radii * np.sin(angles)]
+        )
+        return Polygon(
+            vertices,
+            closed=True,
+            facecolor=CHARCOAL_THEME["grid"],
+            edgecolor=CHARCOAL_THEME["text"],
+            linewidth=1.2,
+            alpha=0.9,
+            label=label,
+            zorder=2,
+        )
+
+    def _create_drone_artists(self, ax, scale):
+        body = Polygon(
+            np.array([[1.25, 0.0], [-0.65, 0.50], [-0.30, 0.0], [-0.65, -0.50]])
+            * scale,
+            closed=True,
+            facecolor=CHARCOAL_THEME["trajectory"],
+            edgecolor=CHARCOAL_THEME["edge"],
+            linewidth=1.0,
+            zorder=6,
+        )
+        arm_1 = ax.plot(
+            [],
+            [],
+            color=CHARCOAL_THEME["initial"],
+            linewidth=1.4,
+            solid_capstyle="round",
+            zorder=5,
+        )[0]
+        arm_2 = ax.plot(
+            [],
+            [],
+            color=CHARCOAL_THEME["initial"],
+            linewidth=1.4,
+            solid_capstyle="round",
+            zorder=5,
+        )[0]
+        rotors = [
+            Circle(
+                (0.0, 0.0),
+                0.23 * scale,
+                facecolor=CHARCOAL_THEME["axes"],
+                edgecolor=CHARCOAL_THEME["initial"],
+                linewidth=1.0,
+                zorder=7,
+            )
+            for _ in range(4)
+        ]
+        ax.add_patch(body)
+        for rotor in rotors:
+            ax.add_patch(rotor)
+        return [arm_1, arm_2, body, *rotors]
+
+    def _position_drone_artists(self, artists, x, y, angle, scale):
+        arm_1, arm_2, body, *rotors = artists
+        arm_points = [
+            np.array([[-0.75, -0.75], [0.75, 0.75]]) * scale,
+            np.array([[-0.75, 0.75], [0.75, -0.75]]) * scale,
+        ]
+        rotor_points = (
+            np.array([[-0.75, -0.75], [-0.75, 0.75], [0.75, -0.75], [0.75, 0.75]])
+            * scale
+        )
+        rotation = np.array(
+            [[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]]
+        )
+        translation = np.array([x, y])
+
+        for arm, points in zip((arm_1, arm_2), arm_points):
+            transformed = points @ rotation.T + translation
+            arm.set_data(transformed[:, 0], transformed[:, 1])
+
+        body.set_transform(
+            Affine2D().rotate(angle).translate(x, y) + body.axes.transData
+        )
+        transformed_rotors = rotor_points @ rotation.T + translation
+        for rotor, center in zip(rotors, transformed_rotors):
+            rotor.center = center
 
     @classmethod
     def _theta_candidates(cls, theta, values, required_duration, monitor, chi_2):

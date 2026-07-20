@@ -5,6 +5,7 @@ import numpy as np
 
 import hybrid_solution
 import obstacle_avoidance
+import so3
 import sphere_2d
 import sphere_3d
 
@@ -26,9 +27,10 @@ def run_sphere_2d():
     )
     solution = simulation.solve()
 
-    simulation.plot(solution)
+    _, animation = simulation.animate(solution)
 
     plt.show()
+    return animation
 
 
 def run_obstacle_avoidance():
@@ -67,11 +69,12 @@ def run_obstacle_avoidance():
         theta_seed=0,
     )
 
-    print(simulation.theta_schedule)
-
     solution = simulation.solve()
-    final_p = solution(t_2)[:3]
-    print(simulation.diffeomorphism_inverse(final_p))
+
+    simulation.plot_obstacle_avoidance(solution)
+    _, animation = simulation.animate_obstacle_avoidance(solution)
+    plt.show()
+    return animation
 
 
 def run_sphere_3d():
@@ -83,7 +86,7 @@ def run_sphere_3d():
     epsilon = 1 / np.sqrt(8 * np.pi)
 
     p0 = np.array([0, 0, -1], dtype=float)
-    eta0 = np.array([1, 0, 0], dtype=float)
+    eta0 = np.tile(np.array([1.0, 0.0]), (3, 1))
     q0 = 1
     t_1 = 0.0
     t_2 = 10.0
@@ -104,9 +107,48 @@ def run_sphere_3d():
         chi_1,
         chi_2,
         control_gains_constants,
+        theta_seed=0,
     )
 
     solution = simulation.solve()
+
+
+def run_so3():
+    p0 = np.diag([-1.0, 1.0, -1.0]).reshape(-1, order="F")
+    eta0 = np.tile(np.array([1.0, 0.0]), (3, 1))
+    q0 = 1
+    gamma = 1
+    kappa = 4
+    angular_velocity = np.array([11, 12, 13], dtype=float)
+    control_gain_constants = np.array([1, 2, 3], dtype=float)
+    delta = 0.2
+    epsilon = 1 / np.sqrt(12 * np.pi)
+    target = np.eye(3).reshape(-1, order="F")
+    t_1 = 0.0
+    t_2 = 20.0
+    chi_1 = 1.0
+    chi_2 = 0.5
+
+    simulation = so3.SO3(
+        p0,
+        eta0,
+        q0,
+        target,
+        gamma,
+        delta,
+        kappa,
+        epsilon,
+        t_1,
+        t_2,
+        chi_1,
+        chi_2,
+        control_gain_constants=control_gain_constants,
+        angular_velocity=angular_velocity,
+        theta_seed=0,
+    )
+
+    solution = simulation.solve()
+    return simulation, solution
 
 
 if __name__ == "__main__":
