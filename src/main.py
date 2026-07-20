@@ -71,7 +71,7 @@ def run_obstacle_avoidance():
 
     solution = simulation.solve()
 
-    simulation.plot_obstacle_avoidance(solution)
+    # simulation.plot_obstacle_avoidance(solution)
     _, animation = simulation.animate_obstacle_avoidance(solution)
     plt.show()
     return animation
@@ -153,5 +153,5 @@ def run_so3():
 
 if __name__ == "__main__":
     # run_sphere_2d()
-    # run_obstacle_avoidance()
-    run_sphere_3d()
+    run_obstacle_avoidance()
+    # run_sphere_3d()

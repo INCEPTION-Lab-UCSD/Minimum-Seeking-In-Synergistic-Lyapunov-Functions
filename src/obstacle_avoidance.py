@@ -1,13 +1,13 @@
+import matplotlib.patches as patches
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
-from matplotlib.patches import Circle, Polygon
-from matplotlib.transforms import Affine2D
 import numpy as np
+from matplotlib.animation import FuncAnimation
+from matplotlib.patches import Polygon
+from matplotlib.transforms import Affine2D
 from scipy.integrate import solve_ivp
 from scipy.linalg import expm
 
 from hybrid_solution import HybridSolution
-
 
 CHARCOAL_THEME = {
     "figure": "#111318",
@@ -272,7 +272,7 @@ class Target_Seeking:
 
         fig, ax = plt.subplots(figsize=(7, 7))
         self._style_obstacle_axis(fig, ax, z)
-        boulder = self._create_boulder_patch(label="boulder")
+        boulder = self._create_boulder_patch(label="obstacle")
         ax.add_patch(boulder)
 
         ax.plot(
@@ -333,7 +333,7 @@ class Target_Seeking:
 
         fig, ax = plt.subplots(figsize=(7, 7))
         self._style_obstacle_axis(fig, ax, z_full)
-        ax.add_patch(self._create_boulder_patch(label="boulder"))
+        ax.add_patch(self._create_boulder_patch(label="obstacle"))
 
         ax.scatter(
             z[0, 0],
@@ -342,7 +342,6 @@ class Target_Seeking:
             edgecolor=CHARCOAL_THEME["edge"],
             linewidth=1.2,
             s=80,
-            label="start",
             zorder=4,
         )
         ax.scatter(
@@ -350,9 +349,9 @@ class Target_Seeking:
             z[1, -1],
             facecolor=CHARCOAL_THEME["target"],
             edgecolor=CHARCOAL_THEME["edge"],
+            marker="*",
             linewidth=1.2,
-            s=80,
-            label="end",
+            s=250,
             zorder=4,
         )
 
@@ -367,6 +366,7 @@ class Target_Seeking:
             va="top",
             color=CHARCOAL_THEME["text"],
             family="monospace",
+            fontsize=16,
         )
 
         legend = ax.legend(loc="best", frameon=False)
@@ -403,11 +403,11 @@ class Target_Seeking:
         for spine in ax.spines.values():
             spine.set_color(CHARCOAL_THEME["grid"])
 
-        ax.tick_params(colors=CHARCOAL_THEME["text"])
-        ax.xaxis.label.set_color(CHARCOAL_THEME["text"])
-        ax.yaxis.label.set_color(CHARCOAL_THEME["text"])
-        ax.title.set_color(CHARCOAL_THEME["text"])
-        ax.grid(True, color=CHARCOAL_THEME["grid"], alpha=0.45, linewidth=0.8)
+        # ax.tick_params(colors=CHARCOAL_THEME["text"])
+        # ax.xaxis.label.set_color(CHARCOAL_THEME["text"])
+        # ax.yaxis.label.set_color(CHARCOAL_THEME["text"])
+        # ax.title.set_color(CHARCOAL_THEME["text"])
+        # ax.grid(True, color=CHARCOAL_THEME["grid"], alpha=0.45, linewidth=0.8)
 
         margin = 0.75
         x_values = np.r_[z[0], self.target[0], self.obstacle_center[0]]
@@ -470,72 +470,89 @@ class Target_Seeking:
         )
 
     def _create_drone_artists(self, ax, scale):
-        body = Polygon(
-            np.array([[1.25, 0.0], [-0.65, 0.50], [-0.30, 0.0], [-0.65, -0.50]])
-            * scale,
-            closed=True,
-            facecolor=CHARCOAL_THEME["trajectory"],
+        rotor_radius = 0.55 * scale
+        arm_length = 1.8 * scale
+        arm_width = 0.12 * scale
+        body = patches.FancyBboxPatch(
+            (-0.72 * scale, -0.50 * scale),
+            1.44 * scale,
+            1.00 * scale,
+            boxstyle=f"round,pad={0.08 * scale},rounding_size={0.35 * scale}",
+            facecolor="#38BDF8",
             edgecolor=CHARCOAL_THEME["edge"],
             linewidth=1.0,
-            zorder=6,
+            zorder=8,
         )
-        arm_1 = ax.plot(
-            [],
-            [],
-            color=CHARCOAL_THEME["initial"],
-            linewidth=1.4,
-            solid_capstyle="round",
-            zorder=5,
-        )[0]
-        arm_2 = ax.plot(
-            [],
-            [],
-            color=CHARCOAL_THEME["initial"],
-            linewidth=1.4,
-            solid_capstyle="round",
-            zorder=5,
-        )[0]
+        arms = [
+            ax.plot(
+                [-arm_length / 2, arm_length / 2],
+                [-arm_length / 2, arm_length / 2],
+                color=CHARCOAL_THEME["edge"],
+                linewidth=arm_width * 90,
+                solid_capstyle="round",
+                zorder=6,
+            )[0],
+            ax.plot(
+                [-arm_length / 2, arm_length / 2],
+                [arm_length / 2, -arm_length / 2],
+                color=CHARCOAL_THEME["edge"],
+                linewidth=arm_width * 90,
+                solid_capstyle="round",
+                zorder=6,
+            )[0],
+        ]
+
         rotors = [
-            Circle(
-                (0.0, 0.0),
-                0.23 * scale,
-                facecolor=CHARCOAL_THEME["axes"],
-                edgecolor=CHARCOAL_THEME["initial"],
-                linewidth=1.0,
+            patches.Circle(
+                (x, y),
+                rotor_radius,
+                facecolor=CHARCOAL_THEME["initial"],
+                edgecolor=CHARCOAL_THEME["edge"],
+                linewidth=0.8,
+                alpha=0.95,
                 zorder=7,
             )
-            for _ in range(4)
+            for x, y in (
+                (-arm_length / 2, -arm_length / 2),
+                (-arm_length / 2, arm_length / 2),
+                (arm_length / 2, -arm_length / 2),
+                (arm_length / 2, arm_length / 2),
+            )
         ]
-        ax.add_patch(body)
-        for rotor in rotors:
-            ax.add_patch(rotor)
-        return [arm_1, arm_2, body, *rotors]
+        rotor_hubs = [
+            patches.Circle(
+                rotor.center,
+                rotor_radius * 0.33,
+                facecolor="#111318",
+                edgecolor=CHARCOAL_THEME["edge"],
+                linewidth=0.6,
+                zorder=9,
+            )
+            for rotor in rotors
+        ]
+        nose = patches.Polygon(
+            [
+                (1.10 * scale, 0.0),
+                (0.48 * scale, -0.36 * scale),
+                (0.48 * scale, 0.36 * scale),
+            ],
+            closed=True,
+            facecolor="#FF4D4D",
+            edgecolor=CHARCOAL_THEME["edge"],
+            linewidth=0.8,
+            zorder=9,
+        )
+
+        patch_artists = [*rotors, body, *rotor_hubs, nose]
+        for artist in patch_artists:
+            ax.add_patch(artist)
+
+        return [*arms, *patch_artists]
 
     def _position_drone_artists(self, artists, x, y, angle, scale):
-        arm_1, arm_2, body, *rotors = artists
-        arm_points = [
-            np.array([[-0.75, -0.75], [0.75, 0.75]]) * scale,
-            np.array([[-0.75, 0.75], [0.75, -0.75]]) * scale,
-        ]
-        rotor_points = (
-            np.array([[-0.75, -0.75], [-0.75, 0.75], [0.75, -0.75], [0.75, 0.75]])
-            * scale
-        )
-        rotation = np.array(
-            [[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]]
-        )
-        translation = np.array([x, y])
-
-        for arm, points in zip((arm_1, arm_2), arm_points):
-            transformed = points @ rotation.T + translation
-            arm.set_data(transformed[:, 0], transformed[:, 1])
-
-        body.set_transform(
-            Affine2D().rotate(angle).translate(x, y) + body.axes.transData
-        )
-        transformed_rotors = rotor_points @ rotation.T + translation
-        for rotor, center in zip(rotors, transformed_rotors):
-            rotor.center = center
+        transform = Affine2D().rotate(angle).translate(x, y)
+        for artist in artists:
+            artist.set_transform(transform + artist.axes.transData)
 
     @classmethod
     def _theta_candidates(cls, theta, values, required_duration, monitor, chi_2):
