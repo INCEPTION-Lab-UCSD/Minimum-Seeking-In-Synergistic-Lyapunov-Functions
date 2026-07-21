@@ -1,7 +1,14 @@
 import numpy as np
+from matplotlib.animation import FuncAnimation
 from scipy.integrate import solve_ivp
 from scipy.linalg import expm
 
+from charcoal_animation import (
+    CHARCOAL_THEME,
+    add_control_gain_artists,
+    create_sphere_animation_figure,
+    update_control_gain_artists,
+)
 from hybrid_solution import HybridSolution
 
 
@@ -230,6 +237,91 @@ class Sphere_3D:
             schedule.append((t, theta))
 
         return schedule
+
+    def animate(self, solution, frame_count=240, interval=40, repeat_delay=1200):
+        t_start = max(self.t_1, float(solution.t[0]))
+        t_end = min(self.t_2, float(solution.t[-1]))
+        times = np.linspace(t_start, t_end, frame_count)
+        states = solution(times)
+        directions = np.column_stack(
+            [self._unit(states[:3, index]) for index in range(frame_count)]
+        ).T
+        gains = np.vstack([self.get_control_gain(t) for t in times])
+
+        fig, ax, ax_gain = create_sphere_animation_figure(
+            r"$S^2$ Pointing-Direction Stabilization"
+        )
+        start = directions[0]
+        ax.scatter(
+            *start,
+            color=CHARCOAL_THEME["initial"],
+            edgecolor=CHARCOAL_THEME["edge"],
+            s=45,
+            label="Start",
+            zorder=5,
+        )
+        ax.scatter(
+            *self.target,
+            color=CHARCOAL_THEME["target"],
+            edgecolor=CHARCOAL_THEME["edge"],
+            marker="*",
+            s=150,
+            label="Target",
+            zorder=6,
+        )
+        (direction_line,) = ax.plot(
+            [0.0, start[0]],
+            [0.0, start[1]],
+            [0.0, start[2]],
+            color=CHARCOAL_THEME["trajectory"],
+            linewidth=2.5,
+        )
+        current = ax.scatter(
+            *start,
+            color=CHARCOAL_THEME["trajectory"],
+            edgecolor=CHARCOAL_THEME["edge"],
+            s=70,
+            zorder=7,
+        )
+        status = ax.text2D(
+            0.03,
+            0.96,
+            "",
+            transform=ax.transAxes,
+            color=CHARCOAL_THEME["text"],
+            va="top",
+        )
+        legend = ax.legend(loc="upper right", frameon=False)
+        for text in legend.get_texts():
+            text.set_color(CHARCOAL_THEME["text"])
+
+        gain_lines, gain_marker = add_control_gain_artists(ax_gain, times, gains)
+
+        def update(frame_index):
+            direction = directions[frame_index]
+            direction_line.set_data_3d(
+                [0.0, direction[0]],
+                [0.0, direction[1]],
+                [0.0, direction[2]],
+            )
+            current._offsets3d = ([direction[0]], [direction[1]], [direction[2]])
+            mode = self._mode(states[:, frame_index])
+            status.set_text(f"t = {times[frame_index]:.2f}   q = {mode}")
+            update_control_gain_artists(
+                gain_lines, gain_marker, times, gains, frame_index
+            )
+            return direction_line, current, status, *gain_lines, gain_marker
+
+        animation = FuncAnimation(
+            fig,
+            update,
+            frames=frame_count,
+            interval=interval,
+            repeat_delay=repeat_delay,
+            blit=False,
+        )
+        update(0)
+        return fig, animation
 
     def _apply_jump(self, y):
         p = self._unit(y[:3])

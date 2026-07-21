@@ -76,7 +76,7 @@ def run_obstacle_avoidance():
     return animation
 
 
-def run_sphere_3d():
+def run_sphere_3d(show=True):
     control_gains_constants = np.array([3.0, 2.0, 1.0])
     target = np.array([0, 0, 1], dtype=float)
     gamma = 1.0
@@ -110,9 +110,13 @@ def run_sphere_3d():
     )
 
     solution = simulation.solve()
+    _, animation = simulation.animate(solution)
+    if show:
+        plt.show()
+    return animation
 
 
-def run_so3():
+def run_so3(show=True):
     p0 = np.diag([-1.0, 1.0, -1.0]).reshape(-1, order="F")
     eta0 = np.tile(np.array([1.0, 0.0]), (3, 1))
     q0 = 1
@@ -147,10 +151,15 @@ def run_so3():
     )
 
     solution = simulation.solve()
-    return simulation, solution
+    _, animation = simulation.animate(solution)
+    if show:
+        plt.show()
+    return animation
 
 
 if __name__ == "__main__":
     # run_sphere_2d()
-    run_obstacle_avoidance()
-    # run_sphere_3d()
+    # run_obstacle_avoidance()
+    # sphere_animation = run_sphere_3d(show=False)
+    attitude_animation = run_so3(show=False)
+    plt.show()
