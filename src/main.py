@@ -71,7 +71,6 @@ def run_obstacle_avoidance():
 
     solution = simulation.solve()
 
-    # simulation.plot_obstacle_avoidance(solution)
     _, animation = simulation.animate_obstacle_avoidance(solution)
     plt.show()
     return animation

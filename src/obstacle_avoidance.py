@@ -320,6 +320,61 @@ class Target_Seeking:
         fig.tight_layout()
         return fig, ax
 
+    def plot_trajectories_and_control_gains(self, solution):
+        t = solution.t
+        z = self.diffeomorphism_inverse(solution.y[:3])
+        theta = np.array([self.control_gain(t_i) for t_i in t])
+
+        fig, (ax_z, ax_theta) = plt.subplots(
+            2, 1, figsize=(9, 6), sharex=True, constrained_layout=True
+        )
+        self._style_time_axis(fig, ax_z)
+        self._style_time_axis(fig, ax_theta)
+
+        ax_z.plot(
+            t,
+            z[0],
+            color=CHARCOAL_THEME["trajectory"],
+            linewidth=1.8,
+            label="$z_1$",
+        )
+        ax_z.plot(
+            t,
+            z[1],
+            color=CHARCOAL_THEME["target"],
+            linewidth=1.8,
+            label="$z_2$",
+        )
+        ax_z.set_title("Trajectories")
+        ax_z.set_ylabel("$z(t)$")
+
+        ax_theta.step(
+            t,
+            theta[:, 0],
+            where="post",
+            color=CHARCOAL_THEME["trajectory"],
+            linewidth=1.8,
+            label=r"$\theta_1$",
+        )
+        ax_theta.step(
+            t,
+            theta[:, 1],
+            where="post",
+            color=CHARCOAL_THEME["target"],
+            linewidth=1.8,
+            label=r"$\theta_2$",
+        )
+        ax_theta.set_title("Control Gains")
+        ax_theta.set_xlabel("$t$")
+        ax_theta.set_ylabel(r"$\theta(t)$")
+
+        for ax in (ax_z, ax_theta):
+            legend = ax.legend(loc="best", frameon=False)
+            for text in legend.get_texts():
+                text.set_color(CHARCOAL_THEME["text"])
+
+        return fig, (ax_z, ax_theta)
+
     def animate_obstacle_avoidance(
         self, solution, frame_count=240, interval=40, repeat_delay=1200
     ):
@@ -330,9 +385,14 @@ class Target_Seeking:
         t_frames = np.linspace(solution.t[0], solution.t[-1], frame_count)
         z = self.diffeomorphism_inverse(solution(t_frames)[:3])
         z_full = self.diffeomorphism_inverse(solution.y[:3])
+        theta = np.array([self.control_gain(t_i) for t_i in t_frames])
 
-        fig, ax = plt.subplots(figsize=(7, 7))
+        fig = plt.figure(figsize=(7, 8), constrained_layout=True)
+        grid = fig.add_gridspec(2, 1, height_ratios=(5.0, 1.0))
+        ax = fig.add_subplot(grid[0, 0])
+        ax_theta = fig.add_subplot(grid[1, 0])
         self._style_obstacle_axis(fig, ax, z_full)
+        self._style_time_axis(fig, ax_theta)
         ax.add_patch(self._create_boulder_patch(label="obstacle"))
 
         ax.scatter(
@@ -373,6 +433,41 @@ class Target_Seeking:
         for text in legend.get_texts():
             text.set_color(CHARCOAL_THEME["text"])
 
+        (theta_1_line,) = ax_theta.plot(
+            [],
+            [],
+            color=CHARCOAL_THEME["trajectory"],
+            drawstyle="steps-post",
+            linewidth=1.8,
+            label=r"$\theta_1$",
+        )
+        (theta_2_line,) = ax_theta.plot(
+            [],
+            [],
+            color=CHARCOAL_THEME["target"],
+            drawstyle="steps-post",
+            linewidth=1.8,
+            label=r"$\theta_2$",
+        )
+        theta_marker = ax_theta.scatter(
+            [],
+            [],
+            facecolor=CHARCOAL_THEME["initial"],
+            edgecolor=CHARCOAL_THEME["edge"],
+            s=28,
+            zorder=4,
+        )
+        ax_theta.set_title("Control Gains")
+        ax_theta.set_xlabel("$t$")
+        ax_theta.set_ylabel(r"$\theta(t)$")
+        ax_theta.set_xlim(t_frames[0], t_frames[-1])
+        theta_margin = 0.2
+        ax_theta.set_ylim(theta.min() - theta_margin, theta.max() + theta_margin)
+
+        time_legend = ax_theta.legend(loc="best", frameon=False)
+        for text in time_legend.get_texts():
+            text.set_color(CHARCOAL_THEME["text"])
+
         def update(frame_idx):
             x = z[0, frame_idx]
             y = z[1, frame_idx]
@@ -383,7 +478,24 @@ class Target_Seeking:
             angle = np.arctan2(direction[1], direction[0])
             self._position_drone_artists(drone_artists, x, y, angle, drone_scale)
             status.set_text(f"t = {t_frames[frame_idx]:.2f}")
-            return (*drone_artists, status)
+
+            frame_slice = slice(0, frame_idx + 1)
+            theta_1_line.set_data(t_frames[frame_slice], theta[frame_slice, 0])
+            theta_2_line.set_data(t_frames[frame_slice], theta[frame_slice, 1])
+            theta_marker.set_offsets(
+                [
+                    [t_frames[frame_idx], theta[frame_idx, 0]],
+                    [t_frames[frame_idx], theta[frame_idx, 1]],
+                ]
+            )
+
+            return (
+                *drone_artists,
+                status,
+                theta_1_line,
+                theta_2_line,
+                theta_marker,
+            )
 
         update(0)
         animation = FuncAnimation(
@@ -394,7 +506,6 @@ class Target_Seeking:
             repeat_delay=repeat_delay,
             blit=True,
         )
-        fig.tight_layout()
         return fig, animation
 
     def _style_obstacle_axis(self, fig, ax, z):
@@ -403,10 +514,10 @@ class Target_Seeking:
         for spine in ax.spines.values():
             spine.set_color(CHARCOAL_THEME["grid"])
 
-        # ax.tick_params(colors=CHARCOAL_THEME["text"])
-        # ax.xaxis.label.set_color(CHARCOAL_THEME["text"])
-        # ax.yaxis.label.set_color(CHARCOAL_THEME["text"])
-        # ax.title.set_color(CHARCOAL_THEME["text"])
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.tick_params(length=0)
+        ax.title.set_color(CHARCOAL_THEME["text"])
         # ax.grid(True, color=CHARCOAL_THEME["grid"], alpha=0.45, linewidth=0.8)
 
         margin = 0.75
@@ -426,9 +537,21 @@ class Target_Seeking:
         )
 
         ax.set_title("Obstacle Avoidance")
-        ax.set_xlabel("$z_1$")
-        ax.set_ylabel("$z_2$")
+        ax.set_xlabel("")
+        ax.set_ylabel("")
         ax.set_aspect("equal", adjustable="box")
+
+    def _style_time_axis(self, fig, ax):
+        fig.patch.set_facecolor(CHARCOAL_THEME["figure"])
+        ax.set_facecolor(CHARCOAL_THEME["axes"])
+        for spine in ax.spines.values():
+            spine.set_color(CHARCOAL_THEME["grid"])
+
+        ax.tick_params(colors=CHARCOAL_THEME["text"])
+        ax.xaxis.label.set_color(CHARCOAL_THEME["text"])
+        ax.yaxis.label.set_color(CHARCOAL_THEME["text"])
+        ax.title.set_color(CHARCOAL_THEME["text"])
+        ax.grid(True, color=CHARCOAL_THEME["grid"], alpha=0.45, linewidth=0.8)
 
     def _create_boulder_patch(self, label=None):
         angles = np.linspace(0.0, 2.0 * np.pi, 18, endpoint=False)
