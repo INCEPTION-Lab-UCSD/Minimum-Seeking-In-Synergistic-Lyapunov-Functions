@@ -91,7 +91,7 @@ def _add_directional_state_artists(ax, channel_count):
 
 def _control_state(value):
     if np.isclose(value, 0.0):
-        return "blind"
+        return "zero"
     return "normal" if value > 0.0 else "reversed"
 
 
@@ -100,7 +100,7 @@ def _control_state_visual(state):
         return "NORMAL", CHARCOAL_THEME["target"], r"$\rightarrow$"
     if state == "reversed":
         return "REVERSED", CHARCOAL_THEME["trajectory"], r"$\leftarrow$"
-    return "ZERO / BLIND", CHARCOAL_THEME["initial"], r"$\times$"
+    return "ZERO", CHARCOAL_THEME["initial"], r"$\times$"
 
 
 def create_drone_artists_3d(

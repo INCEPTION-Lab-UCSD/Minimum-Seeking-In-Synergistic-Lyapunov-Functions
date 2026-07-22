@@ -14,7 +14,6 @@ import mujoco
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-
 _MODEL_XML = r"""
 <mujoco model="so3_attitude_replay">
   <compiler angle="radian" autolimits="true"/>
@@ -140,9 +139,7 @@ def render_so3_animation(
     free_qpos = model.joint("attitude_free").qposadr[0]
     target_mocap = model.body_mocapid[model.body("target").id]
     data.mocap_pos[target_mocap] = np.array([0.0, 0.0, 1.25])
-    data.mocap_quat[target_mocap] = rotation_to_mujoco_quaternion(
-        simulation.R_target
-    )
+    data.mocap_quat[target_mocap] = rotation_to_mujoco_quaternion(simulation.R_target)
 
     times = np.linspace(t_start, t_end, frame_count)
     states = solution(times)
@@ -152,12 +149,10 @@ def render_so3_animation(
 
     try:
         for index, time in enumerate(times):
-            rotation = simulation._project_so3(
-                simulation._matrix(states[:9, index])
-            )
+            rotation = simulation._project_so3(simulation._matrix(states[:9, index]))
             data.qpos[free_qpos : free_qpos + 3] = (0.0, 0.0, 1.25)
-            data.qpos[free_qpos + 3 : free_qpos + 7] = (
-                rotation_to_mujoco_quaternion(rotation)
+            data.qpos[free_qpos + 3 : free_qpos + 7] = rotation_to_mujoco_quaternion(
+                rotation
             )
             data.qvel[:] = 0.0
             data.time = float(time)
@@ -177,9 +172,7 @@ def render_so3_animation(
                 gap=simulation.synergy_gap(
                     states[:9, index], simulation._mode(states[:, index])
                 ),
-                error_degrees=attitude_error_degrees(
-                    rotation, simulation.R_target
-                ),
+                error_degrees=attitude_error_degrees(rotation, simulation.R_target),
                 gains=gains[index],
             )
             writer.append_data(annotated)
@@ -236,27 +229,62 @@ def _annotate_frame(
     small_font = _font(int(13 * scale))
     x = margin + int(18 * scale)
     y = margin + int(14 * scale)
-    draw.text((x, y), "SO(3) ATTITUDE STABILIZATION", font=title_font, fill=(238, 243, 250, 255))
+    draw.text(
+        (x, y),
+        "SO(3) ATTITUDE STABILIZATION",
+        font=title_font,
+        fill=(238, 243, 250, 255),
+    )
     y += int(38 * scale)
     draw.text((x, y), f"t = {time:5.2f} s", font=body_font, fill=(221, 228, 239, 255))
-    draw.text((x + int(148 * scale), y), f"mode q = {mode}", font=body_font, fill=(110, 231, 183, 255))
+    draw.text(
+        (x + int(148 * scale), y),
+        f"mode q = {mode}",
+        font=body_font,
+        fill=(110, 231, 183, 255),
+    )
     y += int(27 * scale)
-    draw.text((x, y), f"attitude error   {error_degrees:6.2f} deg", font=body_font, fill=(221, 228, 239, 255))
+    draw.text(
+        (x, y),
+        f"attitude error   {error_degrees:6.2f} deg",
+        font=body_font,
+        fill=(221, 228, 239, 255),
+    )
     y += int(25 * scale)
-    draw.text((x, y), f"V = {potential:7.4f}     gap = {gap:7.4f}", font=small_font, fill=(178, 190, 207, 255))
+    draw.text(
+        (x, y),
+        f"V = {potential:7.4f}     gap = {gap:7.4f}",
+        font=small_font,
+        fill=(178, 190, 207, 255),
+    )
     y += int(27 * scale)
     gain_text = ",  ".join(
         f"theta{i + 1} {value:+.0f}" for i, value in enumerate(gains)
     )
     draw.text((x, y), gain_text, font=small_font, fill=(147, 197, 253, 255))
 
-    progress = 1.0 if np.isclose(t_end, t_start) else (time - t_start) / (t_end - t_start)
+    progress = (
+        1.0 if np.isclose(t_end, t_start) else (time - t_start) / (t_end - t_start)
+    )
     bar_left = x
     bar_right = margin + panel_width - int(18 * scale)
     bar_top = margin + panel_height - int(17 * scale)
     bar_height = max(3, int(5 * scale))
-    draw.rounded_rectangle((bar_left, bar_top, bar_right, bar_top + bar_height), radius=bar_height, fill=(62, 73, 91, 230))
-    draw.rounded_rectangle((bar_left, bar_top, bar_left + int((bar_right - bar_left) * np.clip(progress, 0.0, 1.0)), bar_top + bar_height), radius=bar_height, fill=(56, 189, 248, 255))
+    draw.rounded_rectangle(
+        (bar_left, bar_top, bar_right, bar_top + bar_height),
+        radius=bar_height,
+        fill=(62, 73, 91, 230),
+    )
+    draw.rounded_rectangle(
+        (
+            bar_left,
+            bar_top,
+            bar_left + int((bar_right - bar_left) * np.clip(progress, 0.0, 1.0)),
+            bar_top + bar_height,
+        ),
+        radius=bar_height,
+        fill=(56, 189, 248, 255),
+    )
 
     legend_y = height - margin - int(46 * scale)
     legend_x = margin
@@ -265,17 +293,51 @@ def _annotate_frame(
         radius=int(12 * scale),
         fill=(8, 12, 20, 180),
     )
-    draw.ellipse((legend_x + int(14 * scale), legend_y + int(14 * scale), legend_x + int(26 * scale), legend_y + int(26 * scale)), fill=(26, 158, 250, 255))
-    draw.text((legend_x + int(34 * scale), legend_y + int(10 * scale)), "actual", font=small_font, fill=(226, 232, 240, 255))
-    draw.ellipse((legend_x + int(113 * scale), legend_y + int(14 * scale), legend_x + int(125 * scale), legend_y + int(26 * scale)), fill=(87, 232, 171, 210))
-    draw.text((legend_x + int(133 * scale), legend_y + int(10 * scale)), "desired ghost", font=small_font, fill=(226, 232, 240, 255))
+    draw.ellipse(
+        (
+            legend_x + int(14 * scale),
+            legend_y + int(14 * scale),
+            legend_x + int(26 * scale),
+            legend_y + int(26 * scale),
+        ),
+        fill=(26, 158, 250, 255),
+    )
+    draw.text(
+        (legend_x + int(34 * scale), legend_y + int(10 * scale)),
+        "actual",
+        font=small_font,
+        fill=(226, 232, 240, 255),
+    )
+    draw.ellipse(
+        (
+            legend_x + int(113 * scale),
+            legend_y + int(14 * scale),
+            legend_x + int(125 * scale),
+            legend_y + int(26 * scale),
+        ),
+        fill=(87, 232, 171, 210),
+    )
+    draw.text(
+        (legend_x + int(133 * scale), legend_y + int(10 * scale)),
+        "desired ghost",
+        font=small_font,
+        fill=(226, 232, 240, 255),
+    )
     return np.asarray(image)
 
 
 def _font(size: int, *, bold: bool = False):
     candidates = (
-        "/System/Library/Fonts/SFNS.ttf" if not bold else "/System/Library/Fonts/SFNSBold.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf" if not bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        (
+            "/System/Library/Fonts/SFNS.ttf"
+            if not bold
+            else "/System/Library/Fonts/SFNSBold.ttf"
+        ),
+        (
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+            if not bold
+            else "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        ),
     )
     for candidate in candidates:
         try:
@@ -292,7 +354,7 @@ def _default_simulation():
         p0=np.diag([-1.0, 1.0, -1.0]),
         eta0=np.tile([1.0, 0.0], (3, 1)),
         q0=1,
-        target=np.eye(3),
+        target=2 * np.eye(3),
         gamma=1.0,
         delta=0.2,
         kappa=4.0,
@@ -310,7 +372,9 @@ def _default_simulation():
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=Path("Animations/so3_mujoco.mp4"))
+    parser.add_argument(
+        "--output", type=Path, default=Path("Animations/so3_mujoco.mp4")
+    )
     parser.add_argument("--fps", type=int, default=30)
     parser.add_argument("--frames", type=int, default=None)
     parser.add_argument("--width", type=int, default=960)

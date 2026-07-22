@@ -162,7 +162,7 @@ def run_so3(show=True):
 
 
 def run_nonholonomic(show=True):
-    z0 = np.array([-4, 4], dtype=float)
+    z0 = np.array([-2, 0], dtype=float)
     psi0 = np.array([1, 0], dtype=float)
     eta0 = np.array([1, 0], dtype=float)
     q0 = 1
@@ -172,9 +172,9 @@ def run_nonholonomic(show=True):
     obstacle_radius = 1.0
 
     epsilon = 1 / np.sqrt(6 * np.pi)
-    target = np.array([1, -2], dtype=float)
+    target = np.array([1, -1], dtype=float)
     t_1 = 0.0
-    t_2 = 60.0
+    t_2 = 30.0
     chi_1 = 1.0
     chi_2 = 0.5
     T_0 = 1.0
@@ -204,6 +204,7 @@ def run_nonholonomic(show=True):
     _, animation = simulation.animate(solution)
     if show:
         plt.show()
+    animation.save(filename="./Animations/nonholonomic.gif")
     return animation
 
 

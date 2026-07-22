@@ -8,7 +8,8 @@ system from equations (35)--(38) of the accompanying paper.
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FuncAnimation
-from matplotlib.patches import Circle, Polygon
+from matplotlib.patches import Circle, FancyBboxPatch
+from matplotlib.transforms import Affine2D
 from scipy.integrate import solve_ivp
 from scipy.linalg import expm
 
@@ -316,13 +317,12 @@ class Nonholonomic:
         return self._scalar(value, "theta")
 
     def plot(self, solution):
-        """Plot the physical trajectory, obstacle, target, and sampled headings."""
+        """Plot the obstacle, target, and vehicle at its final state."""
         z = solution.y[:2]
         psi = solution.y[2:4]
         fig, ax = plt.subplots(figsize=(7, 7))
         self._style_axis(fig, ax, z)
         ax.add_patch(self._obstacle_patch())
-        ax.plot(z[0], z[1], color=CHARCOAL_THEME["trajectory"], linewidth=2.0)
         ax.scatter(
             *self.target,
             marker="*",
@@ -331,23 +331,15 @@ class Nonholonomic:
             edgecolor=CHARCOAL_THEME["edge"],
             zorder=5,
         )
-        stride = max(1, z.shape[1] // 18)
-        ax.quiver(
-            z[0, ::stride],
-            z[1, ::stride],
-            psi[0, ::stride],
-            psi[1, ::stride],
-            color=CHARCOAL_THEME["initial"],
-            angles="xy",
-            scale_units="xy",
-            scale=3.0,
-            width=0.005,
-            zorder=4,
+        vehicle_artists = self._create_vehicle_artists(ax)
+        vehicle_scale = self._vehicle_scale(z)
+        self._position_vehicle_artists(
+            vehicle_artists, z[:, -1], psi[:, -1], vehicle_scale
         )
         return fig, ax
 
     def animate(self, solution, frame_count=360, interval=35, repeat_delay=1200):
-        """Animate the nonholonomic trajectory and unknown control direction."""
+        """Animate the vehicle heading and unknown control direction."""
         frame_count = int(frame_count)
         if frame_count < 2:
             raise ValueError("frame_count must be at least 2")
@@ -364,13 +356,6 @@ class Nonholonomic:
         ax_theta = fig.add_subplot(grid[1, 0])
         self._style_axis(fig, ax, z)
         ax.add_patch(self._obstacle_patch())
-        ax.plot(
-            z[0],
-            z[1],
-            color=CHARCOAL_THEME["trajectory"],
-            linewidth=1.2,
-            alpha=0.35,
-        )
         ax.scatter(
             *self.target,
             marker="*",
@@ -380,29 +365,8 @@ class Nonholonomic:
             zorder=5,
         )
 
-        (trail,) = ax.plot(
-            [],
-            [],
-            color=CHARCOAL_THEME["trajectory"],
-            linewidth=2.2,
-            zorder=4,
-        )
-        vehicle = Polygon(
-            np.zeros((3, 2)),
-            closed=True,
-            facecolor="#38BDF8",
-            edgecolor=CHARCOAL_THEME["edge"],
-            linewidth=1.0,
-            zorder=6,
-        )
-        ax.add_patch(vehicle)
-        (heading,) = ax.plot(
-            [],
-            [],
-            color=CHARCOAL_THEME["initial"],
-            linewidth=2.0,
-            zorder=7,
-        )
+        vehicle_artists = self._create_vehicle_artists(ax)
+
         status = ax.text(
             0.03,
             0.97,
@@ -415,24 +379,18 @@ class Nonholonomic:
         )
         control_artists = add_control_state_artists(ax_theta, theta)
 
-        span = max(np.ptp(z[0]), np.ptp(z[1]), 1.0)
-        vehicle_scale = 0.035 * span
-        body = np.array([[1.4, 0.0], [-0.8, 0.65], [-0.8, -0.65]], dtype=float)
+        vehicle_scale = self._vehicle_scale(z)
 
         def update(frame_index):
             center = z[:, frame_index]
             forward = self._unit(psi[:, frame_index], "psi")
-            left = np.array([-forward[1], forward[0]])
-            rotation = np.column_stack((forward, left))
-            vehicle.set_xy(center + vehicle_scale * (body @ rotation.T))
-            heading.set_data(
-                [center[0], center[0] + 1.8 * vehicle_scale * forward[0]],
-                [center[1], center[1] + 1.8 * vehicle_scale * forward[1]],
+            self._position_vehicle_artists(
+                vehicle_artists, center, forward, vehicle_scale
             )
-            trail.set_data(z[0, : frame_index + 1], z[1, : frame_index + 1])
+
             status.set_text(f"t = {times[frame_index]:.2f}")
             panel = update_control_state_artists(control_artists, theta, frame_index)
-            return trail, vehicle, heading, status, *panel
+            return *vehicle_artists, status, *panel
 
         update(0)
         animation = FuncAnimation(
@@ -449,12 +407,14 @@ class Nonholonomic:
         fig.patch.set_facecolor(CHARCOAL_THEME["figure"])
         ax.set_facecolor(CHARCOAL_THEME["axes"])
         for spine in ax.spines.values():
-            spine.set_color(CHARCOAL_THEME["grid"])
-        ax.tick_params(colors=CHARCOAL_THEME["text"])
-        ax.set_title("Nonholonomic Obstacle Avoidance", color=CHARCOAL_THEME["text"])
-        ax.set_xlabel(r"$z_1$", color=CHARCOAL_THEME["text"])
-        ax.set_ylabel(r"$z_2$", color=CHARCOAL_THEME["text"])
-        ax.grid(True, color=CHARCOAL_THEME["grid"], alpha=0.35)
+            spine.set_visible(False)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+        ax.set_title("Unicycle Model Obstacle Avoidance", color=CHARCOAL_THEME["text"])
+        ax.set_xlabel("")
+        ax.set_ylabel("")
+        ax.grid(False)
         ax.set_aspect("equal", adjustable="box")
 
         margin = 0.75
@@ -472,6 +432,116 @@ class Nonholonomic:
         ]
         ax.set_xlim(x_values.min() - margin, x_values.max() + margin)
         ax.set_ylim(y_values.min() - margin, y_values.max() + margin)
+
+    def _create_vehicle_artists(self, ax):
+        """Create a differential-drive body representing unicycle kinematics."""
+        wheels = [
+            FancyBboxPatch(
+                (-0.43, y),
+                0.86,
+                0.24,
+                boxstyle="round,pad=0.03,rounding_size=0.10",
+                facecolor="#080B10",
+                edgecolor="#94A3B8",
+                linewidth=1.0,
+                zorder=6,
+            )
+            for y in (-0.78, 0.54)
+        ]
+        wheel_treads = [
+            FancyBboxPatch(
+                (x, y),
+                0.08,
+                0.28,
+                boxstyle="round,pad=0.01,rounding_size=0.025",
+                facecolor="#475569",
+                edgecolor="none",
+                zorder=7,
+            )
+            for y in (-0.80, 0.52)
+            for x in (-0.30, 0.22)
+        ]
+        shadow = Circle(
+            (-0.04, -0.05),
+            0.74,
+            facecolor="#020617",
+            edgecolor="none",
+            alpha=0.55,
+            zorder=7,
+        )
+        body = Circle(
+            (0.0, 0.0),
+            0.70,
+            facecolor="#38BDF8",
+            edgecolor="#082F49",
+            linewidth=1.8,
+            zorder=8,
+        )
+        inner_ring = Circle(
+            (0.0, 0.0),
+            0.51,
+            facecolor="#075985",
+            edgecolor="#BAE6FD",
+            linewidth=1.0,
+            zorder=9,
+        )
+        front_fascia = FancyBboxPatch(
+            (0.38, -0.30),
+            0.22,
+            0.60,
+            boxstyle="round,pad=0.03,rounding_size=0.10",
+            facecolor="#FBBF24",
+            edgecolor="#78350F",
+            linewidth=0.8,
+            zorder=10,
+        )
+        hub = Circle(
+            (-0.08, 0.0),
+            0.21,
+            facecolor="#0F172A",
+            edgecolor="#67E8F9",
+            linewidth=1.0,
+            zorder=10,
+        )
+        front_sensor = Circle(
+            (0.61, 0.0),
+            0.09,
+            facecolor="#FEF3C7",
+            edgecolor="#78350F",
+            linewidth=0.7,
+            zorder=11,
+        )
+        artists = [
+            *wheels,
+            *wheel_treads,
+            shadow,
+            body,
+            inner_ring,
+            front_fascia,
+            hub,
+            front_sensor,
+        ]
+        for artist in artists:
+            ax.add_patch(artist)
+        return artists
+
+    @staticmethod
+    def _position_vehicle_artists(artists, center, forward, scale):
+        angle = np.arctan2(forward[1], forward[0])
+        transform = (
+            Affine2D().scale(scale).rotate(angle).translate(center[0], center[1])
+            + artists[0].axes.transData
+        )
+        for artist in artists:
+            artist.set_transform(transform)
+        return tuple(artists)
+
+    def _vehicle_scale(self, z):
+        span = max(np.ptp(z[0]), np.ptp(z[1]), 1.0)
+        return min(
+            max(0.055 * span, 0.20 * self.obstacle_radius),
+            0.55 * self.obstacle_radius,
+        )
 
     def _obstacle_patch(self):
         return Circle(
@@ -546,7 +616,3 @@ class Nonholonomic:
 
     def _mode(self, y):
         return self._validate_mode(y[-1])
-
-
-# Preserve the public name used by earlier versions of this repository.
-Nonholomonic = Nonholonomic
