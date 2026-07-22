@@ -321,7 +321,7 @@ class Sphere_2D:
             artists["point"].set_data([p[0]], [p[1]])
             gain = self.control_gain(t)
             gain_name, gain_color = self._control_gain_visual(gain)
-            artists["status"].set_text(f"t = {t:.2f}\nq = {q}")
+            artists["status"].set_text(f"t = {t:.2f}")
             artists["control_gain"].set_text(f"CONTROL GAIN\n{gain_name}  {gain:+.0f}")
             artists["control_gain"].set_color(gain_color)
             return tuple(artists.values())
@@ -353,7 +353,7 @@ class Sphere_2D:
             color=CHARCOAL_THEME["target"],
             edgecolor=CHARCOAL_THEME["edge"],
             marker="*",
-            s=200,
+            s=300,
             label="target",
             zorder=4,
         )
@@ -375,7 +375,6 @@ class Sphere_2D:
             color=point_color,
             markersize=9,
             linestyle="none",
-            label="point",
             zorder=5,
         )
         status = ax.text(
@@ -387,6 +386,7 @@ class Sphere_2D:
             va="top",
             family="monospace",
             color=CHARCOAL_THEME["text"],
+            fontsize=12,
         )
         control_gain = ax.text(
             0.5,

@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import hybrid_solution
+import nonholonomic
 import obstacle_avoidance
 import so3
 import sphere_2d
@@ -28,6 +29,8 @@ def run_sphere_2d():
     solution = simulation.solve()
 
     _, animation = simulation.animate(solution)
+
+    animation.save(filename="../Animations/circle.gif")
 
     plt.show()
     return animation
@@ -158,9 +161,55 @@ def run_so3(show=True):
     return animation
 
 
+def run_nonholonomic(show=True):
+    z0 = np.array([-4, 4], dtype=float)
+    psi0 = np.array([1, 0], dtype=float)
+    eta0 = np.array([1, 0], dtype=float)
+    q0 = 1
+    gamma = 2.0
+    delta = 0.25
+    kappa = 4.0
+    obstacle_radius = 1.0
+
+    epsilon = 1 / np.sqrt(6 * np.pi)
+    target = np.array([1, -2], dtype=float)
+    t_1 = 0.0
+    t_2 = 60.0
+    chi_1 = 1.0
+    chi_2 = 0.5
+    T_0 = 1.0
+    T_1 = 1.0
+
+    simulation = nonholonomic.Nonholonomic(
+        z0,
+        psi0,
+        eta0,
+        q0,
+        target,
+        obstacle_radius,
+        gamma,
+        delta,
+        kappa,
+        epsilon,
+        t_1,
+        t_2,
+        chi_1,
+        chi_2,
+        T_0=T_0,
+        T_1=T_1,
+        theta_seed=0,
+    )
+
+    solution = simulation.solve()
+    _, animation = simulation.animate(solution)
+    if show:
+        plt.show()
+    return animation
+
+
 if __name__ == "__main__":
-    run_sphere_2d()
+    # run_sphere_2d()
     # run_obstacle_avoidance()
     # sphere_animation = run_sphere_3d(show=False)
     # so3_animation = run_so3(show=False)
-    plt.show()
+    run_nonholonomic()

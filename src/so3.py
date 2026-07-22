@@ -346,6 +346,12 @@ class SO3:
         update(0)
         return fig, animation
 
+    def render_mujoco(self, solution, output_path="Animations/so3_mujoco.mp4", **kwargs):
+        """Render a solved trajectory with the MuJoCo quadrotor scene."""
+        from so3_mujoco import render_so3_animation
+
+        return render_so3_animation(self, solution, output_path, **kwargs)
+
     def _apply_jump(self, y):
         p = y[:9]
         q = self._mode(y)
