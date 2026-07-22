@@ -1,12 +1,12 @@
 from itertools import product
 
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
-from matplotlib.patches import FancyArrowPatch
 import numpy as np
+from matplotlib.animation import FuncAnimation
 from scipy.integrate import solve_ivp
 from scipy.linalg import expm
 
+from charcoal_animation import CHARCOAL_THEME
 from hybrid_solution import HybridSolution
 
 
@@ -307,7 +307,9 @@ class Sphere_2D:
         if frames[-1] != len(solution.t) - 1:
             frames = np.r_[frames, len(solution.t) - 1]
 
-        fig, ax_unit_circle = plt.subplots(figsize=(7, 7))
+        fig, ax_unit_circle = plt.subplots(
+            figsize=(7, 7), facecolor=CHARCOAL_THEME["figure"]
+        )
         artists = self._setup_unit_circle_ax(ax_unit_circle)
 
         def update(frame_idx):
@@ -315,16 +317,13 @@ class Sphere_2D:
             y = solution.y[:, frame_idx]
             p = self._unit(y[:2])
             q = self._mode(y)
-            v = self.lyapunov_function(p, q)
-            direction = self._unit(expm(-self.kappa * v * self.S) @ self.e1)
 
-            artists["point_radius"].set_data([0.0, p[0]], [0.0, p[1]])
             artists["point"].set_data([p[0]], [p[1]])
-            artists["direction_arrow"].set_positions((0.0, 0.0), direction)
-            artists["direction"].set_data([direction[0]], [direction[1]])
-            artists["status"].set_text(
-                f"t = {t:.2f}\nq = {q}\ntheta = {self.control_gain(t):.0f}"
-            )
+            gain = self.control_gain(t)
+            gain_name, gain_color = self._control_gain_visual(gain)
+            artists["status"].set_text(f"t = {t:.2f}\nq = {q}")
+            artists["control_gain"].set_text(f"CONTROL GAIN\n{gain_name}  {gain:+.0f}")
+            artists["control_gain"].set_color(gain_color)
             return tuple(artists.values())
 
         update(frames[0])
@@ -338,33 +337,37 @@ class Sphere_2D:
         fig.tight_layout()
         return fig, animation
 
-    def _setup_unit_circle_ax(self, ax, point_color="tab:red"):
+    def _setup_unit_circle_ax(self, ax, point_color=None):
+        point_color = point_color or CHARCOAL_THEME["trajectory"]
         theta = np.linspace(0.0, 2.0 * np.pi, 400)
-        ax.plot(np.cos(theta), np.sin(theta), color="black", linewidth=1.5)
-        ax.axhline(0.0, color="0.82", linewidth=0.8)
-        ax.axvline(0.0, color="0.82", linewidth=0.8)
+        ax.set_facecolor(CHARCOAL_THEME["axes"])
+        ax.plot(
+            np.cos(theta),
+            np.sin(theta),
+            color=CHARCOAL_THEME["text"],
+            linewidth=1.5,
+        )
         ax.scatter(
             self.p_target[0],
             self.p_target[1],
-            color="black",
+            color=CHARCOAL_THEME["target"],
+            edgecolor=CHARCOAL_THEME["edge"],
             marker="*",
-            s=110,
+            s=200,
             label="target",
             zorder=4,
         )
 
-        (point_radius,) = ax.plot([], [], color=point_color, linewidth=1.1, alpha=0.35)
-        direction_arrow = FancyArrowPatch(
-            (0.0, 0.0),
-            (0.0, 0.0),
-            arrowstyle="-|>",
-            color="tab:orange",
-            mutation_scale=16,
-            linewidth=2.0,
-            alpha=0.85,
-            label="direction",
+        ax.scatter(
+            self.p0[0],
+            self.p0[1],
+            color=CHARCOAL_THEME["initial"],
+            marker="o",
+            s=200,
+            label="start",
+            zorder=4,
         )
-        ax.add_patch(direction_arrow)
+
         (point,) = ax.plot(
             [],
             [],
@@ -375,15 +378,6 @@ class Sphere_2D:
             label="point",
             zorder=5,
         )
-        (direction,) = ax.plot(
-            [],
-            [],
-            marker="o",
-            color="tab:orange",
-            markersize=8,
-            linestyle="none",
-            zorder=5,
-        )
         status = ax.text(
             0.03,
             0.97,
@@ -392,24 +386,53 @@ class Sphere_2D:
             ha="left",
             va="top",
             family="monospace",
+            color=CHARCOAL_THEME["text"],
+        )
+        control_gain = ax.text(
+            0.5,
+            0.5,
+            "",
+            transform=ax.transAxes,
+            ha="center",
+            va="center",
+            fontsize=18,
+            fontweight="bold",
+            linespacing=1.35,
+            bbox={
+                "facecolor": CHARCOAL_THEME["axes"],
+                "edgecolor": "none",
+                "alpha": 0.82,
+                "pad": 6,
+            },
+            zorder=6,
         )
 
-        ax.set_title("Sphere 2D on the Unit Circle")
-        ax.set_xlabel("$p_1$")
-        ax.set_ylabel("$p_2$")
+        ax.set_title("Circle Stabilization", color=CHARCOAL_THEME["text"])
+        ax.set_xticks([])
+        ax.set_yticks([])
+        for spine in ax.spines.values():
+            spine.set_visible(False)
         ax.set_aspect("equal", adjustable="box")
         ax.set_xlim(-1.15, 1.15)
         ax.set_ylim(-1.15, 1.15)
-        ax.grid(True, alpha=0.18)
-        ax.legend(loc="lower right", frameon=False)
+        ax.grid(False)
+        legend = ax.legend(loc="lower right", frameon=False)
+        for text in legend.get_texts():
+            text.set_color(CHARCOAL_THEME["text"])
 
         return {
-            "point_radius": point_radius,
-            "direction_arrow": direction_arrow,
             "point": point,
-            "direction": direction,
             "status": status,
+            "control_gain": control_gain,
         }
+
+    @staticmethod
+    def _control_gain_visual(gain):
+        if np.isclose(gain, 0.0):
+            return "BLIND", CHARCOAL_THEME["initial"]
+        if gain > 0.0:
+            return "NORMAL", CHARCOAL_THEME["target"]
+        return "REVERSED", CHARCOAL_THEME["trajectory"]
 
     def _apply_jump_if_needed(self, y):
         if self.synergy_gap(y[:2], self._mode(y)) >= self.delta:

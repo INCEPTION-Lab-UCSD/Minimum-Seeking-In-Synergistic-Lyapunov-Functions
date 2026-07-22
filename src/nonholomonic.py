@@ -6,6 +6,10 @@ import hybrid_solution
 
 
 class Nonholomonic:
+    Q = (1, 2)
+    S = np.array([[0, 1], [-1, 0]], dtype=float)
+    e1 = np.array([1, 0], dtype=float)
+
     def __init__(
         self,
         p0,
@@ -94,8 +98,26 @@ class Nonholomonic:
 
         return np.r_[R_dot.reshape(-1, order="F"), eta_dot.reshape(-1), q_dot]
 
-    def control(self):
-        pass
+    def control(self, x, eta):
+        lyapunov = self.lyapunov_function(x)
+        u_1 = (
+            1
+            / self.epsilon
+            * np.sqrt((4 * np.pi * self.gamma) / self.kappa)
+            * np.dot(
+                scipy.linalg.expm(-self.kappa * lyapunov @ self.S) @ self.e1, eta[0]
+            )
+        )
+
+        u_2 = 2 * np.pi * 1 / self.epsilon
+
+        return u_1, u_2
+
+    def lyapunov_function(self, x):
+        rho = x[0]
+        nu = x[1:3]
+        q = x[-1]
+        return 0
 
     def _get_control_gain(self):
         pass

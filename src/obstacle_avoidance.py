@@ -7,6 +7,7 @@ from matplotlib.transforms import Affine2D
 from scipy.integrate import solve_ivp
 from scipy.linalg import expm
 
+from charcoal_animation import add_control_state_artists, update_control_state_artists
 from hybrid_solution import HybridSolution
 
 CHARCOAL_THEME = {
@@ -326,10 +327,13 @@ class Target_Seeking:
         theta = np.array([self.control_gain(t_i) for t_i in t])
 
         fig, (ax_z, ax_theta) = plt.subplots(
-            2, 1, figsize=(9, 6), sharex=True, constrained_layout=True
+            2,
+            1,
+            figsize=(9, 6),
+            constrained_layout=True,
+            gridspec_kw={"height_ratios": (5.0, 1.0)},
         )
         self._style_time_axis(fig, ax_z)
-        self._style_time_axis(fig, ax_theta)
 
         ax_z.plot(
             t,
@@ -347,31 +351,13 @@ class Target_Seeking:
         )
         ax_z.set_title("Trajectories")
         ax_z.set_ylabel("$z(t)$")
+        ax_z.set_xlabel("$t$")
 
-        ax_theta.step(
-            t,
-            theta[:, 0],
-            where="post",
-            color=CHARCOAL_THEME["trajectory"],
-            linewidth=1.8,
-            label=r"$\theta_1$",
-        )
-        ax_theta.step(
-            t,
-            theta[:, 1],
-            where="post",
-            color=CHARCOAL_THEME["target"],
-            linewidth=1.8,
-            label=r"$\theta_2$",
-        )
-        ax_theta.set_title("Control Gains")
-        ax_theta.set_xlabel("$t$")
-        ax_theta.set_ylabel(r"$\theta(t)$")
+        add_control_state_artists(ax_theta, theta)
 
-        for ax in (ax_z, ax_theta):
-            legend = ax.legend(loc="best", frameon=False)
-            for text in legend.get_texts():
-                text.set_color(CHARCOAL_THEME["text"])
+        legend = ax_z.legend(loc="best", frameon=False)
+        for text in legend.get_texts():
+            text.set_color(CHARCOAL_THEME["text"])
 
         return fig, (ax_z, ax_theta)
 
@@ -392,8 +378,7 @@ class Target_Seeking:
         ax = fig.add_subplot(grid[0, 0])
         ax_theta = fig.add_subplot(grid[1, 0])
         self._style_obstacle_axis(fig, ax, z_full)
-        self._style_time_axis(fig, ax_theta)
-        ax.add_patch(self._create_boulder_patch(label="obstacle"))
+        ax.add_patch(self._create_boulder_patch())
 
         ax.scatter(
             z[0, 0],
@@ -433,40 +418,7 @@ class Target_Seeking:
         for text in legend.get_texts():
             text.set_color(CHARCOAL_THEME["text"])
 
-        (theta_1_line,) = ax_theta.plot(
-            [],
-            [],
-            color=CHARCOAL_THEME["trajectory"],
-            drawstyle="steps-post",
-            linewidth=1.8,
-            label=r"$\theta_1$",
-        )
-        (theta_2_line,) = ax_theta.plot(
-            [],
-            [],
-            color=CHARCOAL_THEME["target"],
-            drawstyle="steps-post",
-            linewidth=1.8,
-            label=r"$\theta_2$",
-        )
-        theta_marker = ax_theta.scatter(
-            [],
-            [],
-            facecolor=CHARCOAL_THEME["initial"],
-            edgecolor=CHARCOAL_THEME["edge"],
-            s=28,
-            zorder=4,
-        )
-        ax_theta.set_title("Control Gains")
-        ax_theta.set_xlabel("$t$")
-        ax_theta.set_ylabel(r"$\theta(t)$")
-        ax_theta.set_xlim(t_frames[0], t_frames[-1])
-        theta_margin = 0.2
-        ax_theta.set_ylim(theta.min() - theta_margin, theta.max() + theta_margin)
-
-        time_legend = ax_theta.legend(loc="best", frameon=False)
-        for text in time_legend.get_texts():
-            text.set_color(CHARCOAL_THEME["text"])
+        control_artists = add_control_state_artists(ax_theta, theta)
 
         def update(frame_idx):
             x = z[0, frame_idx]
@@ -478,23 +430,14 @@ class Target_Seeking:
             angle = np.arctan2(direction[1], direction[0])
             self._position_drone_artists(drone_artists, x, y, angle, drone_scale)
             status.set_text(f"t = {t_frames[frame_idx]:.2f}")
-
-            frame_slice = slice(0, frame_idx + 1)
-            theta_1_line.set_data(t_frames[frame_slice], theta[frame_slice, 0])
-            theta_2_line.set_data(t_frames[frame_slice], theta[frame_slice, 1])
-            theta_marker.set_offsets(
-                [
-                    [t_frames[frame_idx], theta[frame_idx, 0]],
-                    [t_frames[frame_idx], theta[frame_idx, 1]],
-                ]
+            panel_artists = update_control_state_artists(
+                control_artists, theta, frame_idx
             )
 
             return (
                 *drone_artists,
                 status,
-                theta_1_line,
-                theta_2_line,
-                theta_marker,
+                *panel_artists,
             )
 
         update(0)

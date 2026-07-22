@@ -5,9 +5,11 @@ from scipy.linalg import expm
 
 from charcoal_animation import (
     CHARCOAL_THEME,
-    add_control_gain_artists,
+    add_control_state_artists,
+    create_drone_artists_3d,
     create_sphere_animation_figure,
-    update_control_gain_artists,
+    position_drone_artists_3d,
+    update_control_state_artists,
 )
 from hybrid_solution import HybridSolution
 
@@ -128,12 +130,7 @@ class Sphere_3D:
         )
         p_dot = vector_fields @ (theta * u)
 
-        frequencies = (
-            2.0
-            * np.pi
-            * self.control_gain_constants**-1
-            * self.epsilon**-2
-        )
+        frequencies = 2.0 * np.pi * self.control_gain_constants**-1 * self.epsilon**-2
         eta_dot = frequencies[:, np.newaxis] * (self.S @ eta.T).T
         q_dot = 0.0
 
@@ -238,7 +235,13 @@ class Sphere_3D:
 
         return schedule
 
-    def animate(self, solution, frame_count=240, interval=40, repeat_delay=1200):
+    def animate(
+        self,
+        solution,
+        frame_count=240,
+        interval=40,
+        repeat_delay=1200,
+    ):
         t_start = max(self.t_1, float(solution.t[0]))
         t_end = min(self.t_2, float(solution.t[-1]))
         times = np.linspace(t_start, t_end, frame_count)
@@ -246,18 +249,16 @@ class Sphere_3D:
         directions = np.column_stack(
             [self._unit(states[:3, index]) for index in range(frame_count)]
         ).T
+        attitudes = self._vehicle_attitudes(directions)
         gains = np.vstack([self.get_control_gain(t) for t in times])
 
-        fig, ax, ax_gain = create_sphere_animation_figure(
-            r"$S^2$ Pointing-Direction Stabilization"
-        )
+        fig, ax, ax_control = create_sphere_animation_figure(r"$S^2$ Stabilization")
         start = directions[0]
         ax.scatter(
             *start,
             color=CHARCOAL_THEME["initial"],
             edgecolor=CHARCOAL_THEME["edge"],
             s=45,
-            label="Start",
             zorder=5,
         )
         ax.scatter(
@@ -266,23 +267,9 @@ class Sphere_3D:
             edgecolor=CHARCOAL_THEME["edge"],
             marker="*",
             s=150,
-            label="Target",
             zorder=6,
         )
-        (direction_line,) = ax.plot(
-            [0.0, start[0]],
-            [0.0, start[1]],
-            [0.0, start[2]],
-            color=CHARCOAL_THEME["trajectory"],
-            linewidth=2.5,
-        )
-        current = ax.scatter(
-            *start,
-            color=CHARCOAL_THEME["trajectory"],
-            edgecolor=CHARCOAL_THEME["edge"],
-            s=70,
-            zorder=7,
-        )
+        drone = create_drone_artists_3d(ax)
         status = ax.text2D(
             0.03,
             0.96,
@@ -290,27 +277,27 @@ class Sphere_3D:
             transform=ax.transAxes,
             color=CHARCOAL_THEME["text"],
             va="top",
+            fontsize=12,
         )
         legend = ax.legend(loc="upper right", frameon=False)
         for text in legend.get_texts():
             text.set_color(CHARCOAL_THEME["text"])
 
-        gain_lines, gain_marker = add_control_gain_artists(ax_gain, times, gains)
+        control_artists = add_control_state_artists(ax_control, gains)
 
         def update(frame_index):
             direction = directions[frame_index]
-            direction_line.set_data_3d(
-                [0.0, direction[0]],
-                [0.0, direction[1]],
-                [0.0, direction[2]],
+            drone_artists = position_drone_artists_3d(
+                drone,
+                1.08 * direction,
+                attitudes[frame_index],
             )
-            current._offsets3d = ([direction[0]], [direction[1]], [direction[2]])
-            mode = self._mode(states[:, frame_index])
-            status.set_text(f"t = {times[frame_index]:.2f}   q = {mode}")
-            update_control_gain_artists(
-                gain_lines, gain_marker, times, gains, frame_index
+
+            status.set_text(f"t = {times[frame_index]:.2f}")
+            panel_artists = update_control_state_artists(
+                control_artists, gains, frame_index
             )
-            return direction_line, current, status, *gain_lines, gain_marker
+            return *drone_artists, status, *panel_artists
 
         animation = FuncAnimation(
             fig,
@@ -322,6 +309,31 @@ class Sphere_3D:
         )
         update(0)
         return fig, animation
+
+    @classmethod
+    def _vehicle_attitudes(cls, directions):
+        attitudes = []
+        previous_forward = None
+
+        for index, radial in enumerate(directions):
+            previous_index = max(0, index - 1)
+            next_index = min(len(directions) - 1, index + 1)
+            forward = directions[next_index] - directions[previous_index]
+            forward -= np.dot(forward, radial) * radial
+
+            if np.linalg.norm(forward) < 1e-7 and previous_forward is not None:
+                forward = previous_forward - np.dot(previous_forward, radial) * radial
+            if np.linalg.norm(forward) < 1e-7:
+                reference = np.eye(3)[np.argmin(np.abs(radial))]
+                forward = reference - np.dot(reference, radial) * radial
+
+            forward = cls._unit(forward)
+            lateral = cls._unit(np.cross(radial, forward))
+            forward = cls._unit(np.cross(lateral, radial))
+            attitudes.append(np.column_stack((forward, lateral, radial)))
+            previous_forward = forward
+
+        return attitudes
 
     def _apply_jump(self, y):
         p = self._unit(y[:3])

@@ -72,6 +72,7 @@ def run_obstacle_avoidance():
     solution = simulation.solve()
 
     _, animation = simulation.animate_obstacle_avoidance(solution)
+
     plt.show()
     return animation
 
@@ -88,7 +89,7 @@ def run_sphere_3d(show=True):
     eta0 = np.tile(np.array([1.0, 0.0]), (3, 1))
     q0 = 1
     t_1 = 0.0
-    t_2 = 10.0
+    t_2 = 15.0
     chi_1 = 1.0
     chi_2 = 0.5
 
@@ -110,7 +111,7 @@ def run_sphere_3d(show=True):
     )
 
     solution = simulation.solve()
-    _, animation = simulation.animate(solution)
+    _, animation = simulation.animate(solution, frame_count=1000)
     if show:
         plt.show()
     return animation
@@ -128,7 +129,7 @@ def run_so3(show=True):
     epsilon = 1 / np.sqrt(12 * np.pi)
     target = np.eye(3).reshape(-1, order="F")
     t_1 = 0.0
-    t_2 = 20.0
+    t_2 = 10.0
     chi_1 = 1.0
     chi_2 = 0.5
 
@@ -151,15 +152,15 @@ def run_so3(show=True):
     )
 
     solution = simulation.solve()
-    _, animation = simulation.animate(solution)
+    _, animation = simulation.animate(solution, frame_count=1000)
     if show:
         plt.show()
     return animation
 
 
 if __name__ == "__main__":
-    # run_sphere_2d()
+    run_sphere_2d()
     # run_obstacle_avoidance()
     # sphere_animation = run_sphere_3d(show=False)
-    attitude_animation = run_so3(show=False)
+    # so3_animation = run_so3(show=False)
     plt.show()
