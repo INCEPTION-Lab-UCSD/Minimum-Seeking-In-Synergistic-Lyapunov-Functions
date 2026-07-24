@@ -429,7 +429,7 @@ class Sphere_2D:
     @staticmethod
     def _control_gain_visual(gain):
         if np.isclose(gain, 0.0):
-            return "BLIND", CHARCOAL_THEME["initial"]
+            return "ZERO", CHARCOAL_THEME["initial"]
         if gain > 0.0:
             return "NORMAL", CHARCOAL_THEME["target"]
         return "REVERSED", CHARCOAL_THEME["trajectory"]

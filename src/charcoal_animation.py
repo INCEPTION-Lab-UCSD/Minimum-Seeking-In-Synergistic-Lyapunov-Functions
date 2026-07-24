@@ -18,7 +18,7 @@ CHARCOAL_THEME = {
 
 def create_sphere_animation_figure(title):
     fig = plt.figure(figsize=(7, 8), facecolor=CHARCOAL_THEME["figure"])
-    grid = fig.add_gridspec(2, 1, height_ratios=(5.0, 1.0), hspace=0.12)
+    grid = fig.add_gridspec(2, 1, height_ratios=(5.6, 1.0), hspace=0.08)
     ax_sphere = fig.add_subplot(grid[0, 0], projection="3d")
     ax_control = fig.add_subplot(grid[1, 0])
 

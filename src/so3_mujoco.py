@@ -206,7 +206,7 @@ def _annotate_frame(
     scale = min(width / 960.0, height / 720.0)
     margin = int(24 * scale)
     panel_width = int(520 * scale)
-    panel_height = int(230 * scale)
+    panel_height = int(204 * scale)
     panel_left = (width - panel_width) // 2
     panel_top = margin
     radius = int(16 * scale)
@@ -278,7 +278,7 @@ def _annotate_frame(
         font=small_font,
         fill=(178, 190, 207, 255),
     )
-    gap_text = f"Gap = {gap:7.4f}"
+    gap_text = f"Synergy Gap = {gap:7.4f}"
     gap_box = draw.textbbox((0, 0), gap_text, font=small_font)
     draw.text(
         (
@@ -289,15 +289,7 @@ def _annotate_frame(
         font=small_font,
         fill=(178, 190, 207, 255),
     )
-    y += int(33 * scale)
-    gain_text = ",  ".join(f"Gain{i + 1} {value:+.0f}" for i, value in enumerate(gains))
-    draw.text(
-        (panel_left + panel_width // 2, y),
-        gain_text,
-        font=small_font,
-        fill=(147, 197, 253, 255),
-        anchor="mt",
-    )
+    gain_text = "  ".join(f"Gain {i + 1} {value:+.0f}" for i, value in enumerate(gains))
 
     progress = (
         1.0 if np.isclose(t_end, t_start) else (time - t_start) / (t_end - t_start)
@@ -320,6 +312,32 @@ def _annotate_frame(
         ),
         radius=bar_height,
         fill=(56, 189, 248, 255),
+    )
+
+    gain_font = _font(int(20 * scale), bold=True)
+    gain_box = draw.textbbox((0, 0), gain_text, font=gain_font)
+    gain_width = gain_box[2] - gain_box[0]
+    gain_height = gain_box[3] - gain_box[1]
+    gain_padding_x = int(24 * scale)
+    gain_padding_y = int(11 * scale)
+    gain_panel_width = gain_width + 2 * gain_padding_x
+    gain_panel_height = gain_height + 2 * gain_padding_y
+    gain_left = (width - gain_panel_width) // 2
+    gain_bottom = height - int(42 * scale)
+    gain_top = gain_bottom - gain_panel_height
+    draw.rounded_rectangle(
+        (gain_left, gain_top, gain_left + gain_panel_width, gain_bottom),
+        radius=int(12 * scale),
+        fill=(8, 12, 20, 205),
+        outline=(104, 119, 142, 125),
+        width=max(1, int(1.5 * scale)),
+    )
+    draw.text(
+        (width // 2, gain_top + gain_padding_y),
+        gain_text,
+        font=gain_font,
+        fill=(147, 197, 253, 255),
+        anchor="mt",
     )
     return np.asarray(image)
 
