@@ -1,7 +1,7 @@
 """MuJoCo renderer for the SO(3) minimum-seeking example.
 
 The controller remains in :mod:`so3`; this module only replays a solved
-attitude trajectory on a MuJoCo quadrotor model and writes a video.
+attitude trajectory on a spherical MuJoCo rigid body and writes a video.
 """
 
 from __future__ import annotations
@@ -30,9 +30,7 @@ _MODEL_XML = r"""
     <texture name="floor_tex" type="2d" builtin="checker"
              rgb1="0.11 0.13 0.17" rgb2="0.16 0.18 0.23" width="512" height="512"/>
     <material name="floor" texture="floor_tex" texrepeat="8 8" reflectance="0.12" roughness="0.8"/>
-    <material name="carbon" rgba="0.055 0.065 0.080 1" metallic="0.55" roughness="0.3"/>
     <material name="blue" rgba="0.10 0.62 0.98 1" metallic="0.35" roughness="0.24"/>
-    <material name="rotor" rgba="0.78 0.84 0.91 0.9" metallic="0.7" roughness="0.2"/>
     <material name="target" rgba="0.34 0.92 0.67 0.18" emission="0.18" roughness="0.35"/>
   </asset>
   <default>
@@ -52,13 +50,7 @@ _MODEL_XML = r"""
 
     <!-- Desired attitude: a translucent, slightly larger reference ghost. -->
     <body name="target" mocap="true" pos="0 0 1.25">
-      <geom type="box" size="0.36 0.25 0.105" material="target"/>
-      <geom type="capsule" fromto="-0.48 -0.48 0 0.48 0.48 0" size="0.025" material="target"/>
-      <geom type="capsule" fromto="-0.48 0.48 0 0.48 -0.48 0" size="0.025" material="target"/>
-      <geom type="cylinder" pos="-0.48 -0.48 0" size="0.19 0.014" material="target"/>
-      <geom type="cylinder" pos="-0.48 0.48 0" size="0.19 0.014" material="target"/>
-      <geom type="cylinder" pos="0.48 -0.48 0" size="0.19 0.014" material="target"/>
-      <geom type="cylinder" pos="0.48 0.48 0" size="0.19 0.014" material="target"/>
+      <geom type="sphere" size="0.39" material="target"/>
       <geom type="capsule" fromto="0 0 0 1.08 0 0" size="0.014" rgba="1 0.28 0.26 0.22"/>
       <geom type="capsule" fromto="0 0 0 0 1.08 0" size="0.014" rgba="0.35 1 0.48 0.22"/>
       <geom type="capsule" fromto="0 0 0 0 0 1.08" size="0.014" rgba="0.28 0.58 1 0.22"/>
@@ -67,15 +59,15 @@ _MODEL_XML = r"""
     <!-- Actual attitude, driven directly from the SO(3) solution. -->
     <body name="attitude" pos="0 0 1.25">
       <freejoint name="attitude_free"/>
-      <geom name="body" type="box" size="0.32 0.21 0.09" material="blue"/>
-      <geom type="box" pos="0.25 0 0.085" size="0.13 0.13 0.035" material="carbon"/>
-      <geom type="sphere" pos="0.39 0 0.10" size="0.075" rgba="1 0.24 0.20 1"/>
-      <geom type="capsule" fromto="-0.43 -0.43 0 0.43 0.43 0" size="0.033" material="carbon"/>
-      <geom type="capsule" fromto="-0.43 0.43 0 0.43 -0.43 0" size="0.033" material="carbon"/>
-      <geom type="cylinder" pos="-0.43 -0.43 0" size="0.16 0.018" material="rotor"/>
-      <geom type="cylinder" pos="-0.43 0.43 0" size="0.16 0.018" material="rotor"/>
-      <geom type="cylinder" pos="0.43 -0.43 0" size="0.16 0.018" material="rotor"/>
-      <geom type="cylinder" pos="0.43 0.43 0" size="0.16 0.018" material="rotor"/>
+      <geom name="body" type="sphere" size="0.36" material="blue"/>
+      <geom name="spot_x" type="cylinder" pos="0.36 0 0"
+            quat="0.707107 0 0.707107 0" size="0.085 0.008"
+            rgba="1 0.20 0.18 1"/>
+      <geom name="spot_y" type="cylinder" pos="0 0.36 0"
+            quat="0.707107 -0.707107 0 0" size="0.085 0.008"
+            rgba="0.20 0.92 0.36 1"/>
+      <geom name="spot_z" type="cylinder" pos="0 0 0.36"
+            size="0.085 0.008" rgba="0.20 0.48 1 1"/>
       <geom type="capsule" fromto="0 0 0 0.82 0 0" size="0.018" rgba="1 0.20 0.18 0.95"/>
       <geom type="sphere" pos="0.82 0 0" size="0.035" rgba="1 0.20 0.18 1"/>
       <geom type="capsule" fromto="0 0 0 0 0.82 0" size="0.018" rgba="0.20 0.92 0.36 0.95"/>
@@ -213,63 +205,107 @@ def _annotate_frame(
     width, height = image.size
     scale = min(width / 960.0, height / 720.0)
     margin = int(24 * scale)
-    panel_width = int(314 * scale)
-    panel_height = int(190 * scale)
+    panel_width = int(520 * scale)
+    panel_height = int(230 * scale)
+    panel_left = (width - panel_width) // 2
+    panel_top = margin
     radius = int(16 * scale)
     draw.rounded_rectangle(
-        (margin, margin, margin + panel_width, margin + panel_height),
+        (
+            panel_left,
+            panel_top,
+            panel_left + panel_width,
+            panel_top + panel_height,
+        ),
         radius=radius,
         fill=(8, 12, 20, 205),
         outline=(104, 119, 142, 125),
         width=max(1, int(1.5 * scale)),
     )
 
-    title_font = _font(int(21 * scale), bold=True)
-    body_font = _font(int(15 * scale))
-    small_font = _font(int(13 * scale))
-    x = margin + int(18 * scale)
-    y = margin + int(14 * scale)
+    title_font = _font(int(29 * scale), bold=True)
+    body_font = _font(int(21 * scale))
+    small_font = _font(int(18 * scale))
+    x = panel_left + int(26 * scale)
+    y = panel_top + int(15 * scale)
+    panel_title = "SO(3) STABILIZATION"
     draw.text(
-        (x, y),
-        "SO(3) ATTITUDE STABILIZATION",
+        (panel_left + panel_width // 2, y),
+        panel_title,
         font=title_font,
         fill=(238, 243, 250, 255),
+        anchor="mt",
     )
-    y += int(38 * scale)
-    draw.text((x, y), f"t = {time:5.2f} s", font=body_font, fill=(221, 228, 239, 255))
+    divider_y = panel_top + int(61 * scale)
+    draw.line(
+        (
+            panel_left + int(24 * scale),
+            divider_y,
+            panel_left + panel_width - int(24 * scale),
+            divider_y,
+        ),
+        fill=(104, 119, 142, 90),
+        width=max(1, int(scale)),
+    )
+
+    y = panel_top + int(76 * scale)
     draw.text(
-        (x + int(148 * scale), y),
-        f"mode q = {mode}",
+        (x, y), f"Time = {time:5.2f} s", font=body_font, fill=(221, 228, 239, 255)
+    )
+    mode_text = f"Mode q = {mode}"
+    mode_box = draw.textbbox((0, 0), mode_text, font=body_font)
+    draw.text(
+        (
+            panel_left + panel_width - int(26 * scale) - (mode_box[2] - mode_box[0]),
+            y,
+        ),
+        mode_text,
         font=body_font,
         fill=(110, 231, 183, 255),
     )
-    y += int(27 * scale)
+
+    y += int(36 * scale)
     draw.text(
         (x, y),
-        f"attitude error   {error_degrees:6.2f} deg",
+        f"Error {error_degrees:6.2f} deg",
         font=body_font,
         fill=(221, 228, 239, 255),
     )
-    y += int(25 * scale)
+    y += int(32 * scale)
     draw.text(
         (x, y),
-        f"V = {potential:7.4f}     gap = {gap:7.4f}",
+        f"Potential = {potential:7.4f}",
         font=small_font,
         fill=(178, 190, 207, 255),
     )
-    y += int(27 * scale)
-    gain_text = ",  ".join(
-        f"theta{i + 1} {value:+.0f}" for i, value in enumerate(gains)
+    gap_text = f"Gap = {gap:7.4f}"
+    gap_box = draw.textbbox((0, 0), gap_text, font=small_font)
+    draw.text(
+        (
+            panel_left + panel_width - int(26 * scale) - (gap_box[2] - gap_box[0]),
+            y,
+        ),
+        gap_text,
+        font=small_font,
+        fill=(178, 190, 207, 255),
     )
-    draw.text((x, y), gain_text, font=small_font, fill=(147, 197, 253, 255))
+    y += int(33 * scale)
+    gain_text = ",  ".join(f"Gain{i + 1} {value:+.0f}" for i, value in enumerate(gains))
+    draw.text(
+        (panel_left + panel_width // 2, y),
+        gain_text,
+        font=small_font,
+        fill=(147, 197, 253, 255),
+        anchor="mt",
+    )
 
     progress = (
         1.0 if np.isclose(t_end, t_start) else (time - t_start) / (t_end - t_start)
     )
     bar_left = x
-    bar_right = margin + panel_width - int(18 * scale)
-    bar_top = margin + panel_height - int(17 * scale)
-    bar_height = max(3, int(5 * scale))
+    bar_right = panel_left + panel_width - int(26 * scale)
+    bar_top = panel_top + panel_height - int(18 * scale)
+    bar_height = max(3, int(6 * scale))
     draw.rounded_rectangle(
         (bar_left, bar_top, bar_right, bar_top + bar_height),
         radius=bar_height,
@@ -285,58 +321,21 @@ def _annotate_frame(
         radius=bar_height,
         fill=(56, 189, 248, 255),
     )
-
-    legend_y = height - margin - int(46 * scale)
-    legend_x = margin
-    draw.rounded_rectangle(
-        (legend_x, legend_y, legend_x + int(318 * scale), height - margin),
-        radius=int(12 * scale),
-        fill=(8, 12, 20, 180),
-    )
-    draw.ellipse(
-        (
-            legend_x + int(14 * scale),
-            legend_y + int(14 * scale),
-            legend_x + int(26 * scale),
-            legend_y + int(26 * scale),
-        ),
-        fill=(26, 158, 250, 255),
-    )
-    draw.text(
-        (legend_x + int(34 * scale), legend_y + int(10 * scale)),
-        "actual",
-        font=small_font,
-        fill=(226, 232, 240, 255),
-    )
-    draw.ellipse(
-        (
-            legend_x + int(113 * scale),
-            legend_y + int(14 * scale),
-            legend_x + int(125 * scale),
-            legend_y + int(26 * scale),
-        ),
-        fill=(87, 232, 171, 210),
-    )
-    draw.text(
-        (legend_x + int(133 * scale), legend_y + int(10 * scale)),
-        "desired ghost",
-        font=small_font,
-        fill=(226, 232, 240, 255),
-    )
     return np.asarray(image)
 
 
 def _font(size: int, *, bold: bool = False):
     candidates = (
         (
-            "/System/Library/Fonts/SFNS.ttf"
-            if not bold
-            else "/System/Library/Fonts/SFNSBold.ttf"
+            "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+            if bold
+            else "/System/Library/Fonts/SFNS.ttf"
         ),
+        "/System/Library/Fonts/Helvetica.ttc",
         (
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-            if not bold
-            else "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+            if bold
+            else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
         ),
     )
     for candidate in candidates:
@@ -354,7 +353,7 @@ def _default_simulation():
         p0=np.diag([-1.0, 1.0, -1.0]),
         eta0=np.tile([1.0, 0.0], (3, 1)),
         q0=1,
-        target=2 * np.eye(3),
+        target=np.eye(3),
         gamma=1.0,
         delta=0.2,
         kappa=4.0,
