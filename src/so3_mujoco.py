@@ -289,7 +289,9 @@ def _annotate_frame(
         font=small_font,
         fill=(178, 190, 207, 255),
     )
-    gain_text = "  ".join(f"Gain {i + 1} {value:+.0f}" for i, value in enumerate(gains))
+    gain_text = "  ".join(
+        f"Gain {i + 1} = {value:+.0f}" for i, value in enumerate(gains)
+    )
 
     progress = (
         1.0 if np.isclose(t_end, t_start) else (time - t_start) / (t_end - t_start)

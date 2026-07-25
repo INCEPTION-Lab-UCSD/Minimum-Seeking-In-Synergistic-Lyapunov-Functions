@@ -21,7 +21,7 @@ def run_sphere_2d():
     epsilon = 1 / np.sqrt(4 * np.pi)
     delta = 0.25
     t_1 = 0.0
-    t_2 = 25.0
+    t_2 = 20.0
     p_target = np.array([0, 1])
     simulation = sphere_2d.Sphere_2D(
         p0, q0, p_target, gamma, kappa, epsilon, t_1, t_2, delta=delta, eta0=eta0
@@ -36,7 +36,7 @@ def run_sphere_2d():
     return animation
 
 
-def run_obstacle_avoidance():
+def run_obstacle_avoidance(save=False):
     z0 = np.array([0, -4], dtype=float)
     target = np.array([0, 2], dtype=float)
     q0 = 1
@@ -76,6 +76,9 @@ def run_obstacle_avoidance():
 
     _, animation = simulation.animate_obstacle_avoidance(solution)
 
+    if save:
+        animation.save("./Animations/obstacle_avoidance.gif")
+
     plt.show()
     return animation
 
@@ -92,7 +95,7 @@ def run_sphere_3d(show=True):
     eta0 = np.tile(np.array([1.0, 0.0]), (3, 1))
     q0 = 1
     t_1 = 0.0
-    t_2 = 15.0
+    t_2 = 12.0
     chi_1 = 1.0
     chi_2 = 0.5
 
@@ -211,6 +214,6 @@ def run_nonholonomic(show=True):
 if __name__ == "__main__":
     # run_sphere_2d()
     # run_obstacle_avoidance()
-    # sphere_animation = run_sphere_3d(show=False)
-    # so3_animation = run_so3(show=False)
-    run_nonholonomic()
+    # sphere_animation = run_sphere_3d()
+    so3_animation = run_so3()
+    # run_nonholonomic()

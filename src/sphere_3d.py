@@ -269,7 +269,7 @@ class Sphere_3D:
             s=150,
             zorder=6,
         )
-        drone = create_drone_artists_3d(ax)
+        drone = create_drone_artists_3d(ax, scale=0.15)
         status = ax.text2D(
             0.03,
             0.96,
@@ -289,7 +289,7 @@ class Sphere_3D:
             direction = directions[frame_index]
             drone_artists = position_drone_artists_3d(
                 drone,
-                1.08 * direction,
+                1.04 * direction,
                 attitudes[frame_index],
             )
 

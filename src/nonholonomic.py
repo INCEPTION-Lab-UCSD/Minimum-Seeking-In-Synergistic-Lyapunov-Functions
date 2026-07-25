@@ -16,6 +16,7 @@ from scipy.linalg import expm
 from charcoal_animation import (
     CHARCOAL_THEME,
     add_control_state_artists,
+    align_control_panel,
     update_control_state_artists,
 )
 from hybrid_solution import HybridSolution
@@ -336,6 +337,9 @@ class Nonholonomic:
         self._position_vehicle_artists(
             vehicle_artists, z[:, -1], psi[:, -1], vehicle_scale
         )
+        self._update_vehicle_gain_color(
+            vehicle_artists, self.control_gain(solution.t[-1])
+        )
         return fig, ax
 
     def animate(self, solution, frame_count=360, interval=35, repeat_delay=1200):
@@ -351,7 +355,7 @@ class Nonholonomic:
         theta = np.array([[self.control_gain(time)] for time in times])
 
         fig = plt.figure(figsize=(7, 8), constrained_layout=True)
-        grid = fig.add_gridspec(2, 1, height_ratios=(5.0, 1.0))
+        grid = fig.add_gridspec(2, 1, height_ratios=(4.8, 1.15))
         ax = fig.add_subplot(grid[0, 0])
         ax_theta = fig.add_subplot(grid[1, 0])
         self._style_axis(fig, ax, z)
@@ -376,8 +380,10 @@ class Nonholonomic:
             va="top",
             color=CHARCOAL_THEME["text"],
             family="monospace",
+            fontsize=14,
         )
-        control_artists = add_control_state_artists(ax_theta, theta)
+        control_artists = add_control_state_artists(ax_theta, theta, card=True)
+        align_control_panel(ax, ax_theta)
 
         vehicle_scale = self._vehicle_scale(z)
 
@@ -387,10 +393,11 @@ class Nonholonomic:
             self._position_vehicle_artists(
                 vehicle_artists, center, forward, vehicle_scale
             )
+            self._update_vehicle_gain_color(vehicle_artists, theta[frame_index, 0])
 
             status.set_text(f"t = {times[frame_index]:.2f}")
             panel = update_control_state_artists(control_artists, theta, frame_index)
-            return *vehicle_artists, status, *panel
+            return *vehicle_artists["all"], status, *panel
 
         update(0)
         animation = FuncAnimation(
@@ -523,18 +530,37 @@ class Nonholonomic:
         ]
         for artist in artists:
             ax.add_patch(artist)
-        return artists
+        return {
+            "all": artists,
+            "gain_surfaces": (body, front_fascia),
+            "gain_accents": (inner_ring, front_sensor),
+        }
 
     @staticmethod
-    def _position_vehicle_artists(artists, center, forward, scale):
+    def _position_vehicle_artists(vehicle, center, forward, scale):
         angle = np.arctan2(forward[1], forward[0])
         transform = (
             Affine2D().scale(scale).rotate(angle).translate(center[0], center[1])
-            + artists[0].axes.transData
+            + vehicle["all"][0].axes.transData
         )
-        for artist in artists:
+        for artist in vehicle["all"]:
             artist.set_transform(transform)
-        return tuple(artists)
+        return tuple(vehicle["all"])
+
+    @staticmethod
+    def _update_vehicle_gain_color(vehicle, gain):
+        if np.isclose(gain, 0.0):
+            color = CHARCOAL_THEME["initial"]
+        elif gain > 0.0:
+            color = CHARCOAL_THEME["target"]
+        else:
+            color = CHARCOAL_THEME["trajectory"]
+
+        for surface in vehicle["gain_surfaces"]:
+            surface.set_facecolor(color)
+        for accent in vehicle["gain_accents"]:
+            accent.set_edgecolor(color)
+        return *vehicle["gain_surfaces"], *vehicle["gain_accents"]
 
     def _vehicle_scale(self, z):
         span = max(np.ptp(z[0]), np.ptp(z[1]), 1.0)

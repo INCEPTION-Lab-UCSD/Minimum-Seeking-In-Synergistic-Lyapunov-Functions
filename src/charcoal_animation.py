@@ -1,6 +1,7 @@
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.patches import FancyBboxPatch
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 CHARCOAL_THEME = {
@@ -28,13 +29,13 @@ def create_sphere_animation_figure(title):
     return fig, ax_sphere, ax_control
 
 
-def add_control_state_artists(ax, gains):
+def add_control_state_artists(ax, gains, *, card=False):
     gains = np.asarray(gains, dtype=float)
     if gains.ndim != 2:
         raise ValueError("gains must have shape (frame_count, channel_count)")
 
-    _style_control_axis(ax, gains.shape[1])
-    artists = _add_directional_state_artists(ax, gains.shape[1])
+    _style_control_axis(ax, gains.shape[1], card=card)
+    artists = _add_directional_state_artists(ax, gains.shape[1], card=card)
     update_control_state_artists(artists, gains, 0)
     return artists
 
@@ -53,7 +54,35 @@ def update_control_state_artists(artists, gains, frame_index):
     return tuple(artists["all"])
 
 
-def _add_directional_state_artists(ax, channel_count):
+def align_control_panel(ax_reference, ax_control):
+    """Match a control panel's displayed width to the plot directly above it."""
+    fig = ax_reference.figure
+    if ax_control.figure is not fig:
+        raise ValueError("ax_reference and ax_control must belong to the same figure")
+
+    # Equal-aspect trajectory axes can occupy only part of their grid cell. Resolve
+    # the layout once, then use that displayed width for the panel beneath it.
+    fig.canvas.draw()
+    reference_position = ax_reference.get_position().frozen()
+    control_position = ax_control.get_position().frozen()
+    fig.set_layout_engine(None)
+    ax_reference.set_position(reference_position)
+    ax_control.set_position(
+        (
+            reference_position.x0,
+            control_position.y0,
+            reference_position.width,
+            control_position.height,
+        )
+    )
+
+
+def _add_directional_state_artists(ax, channel_count, *, card=False):
+    if card:
+        gain_y, symbol_y, label_y = 0.56, 0.33, 0.13
+    else:
+        gain_y, symbol_y, label_y = 0.82, 0.48, 0.16
+
     gain_labels = []
     symbols = []
     labels = []
@@ -61,19 +90,21 @@ def _add_directional_state_artists(ax, channel_count):
         gain_labels.append(
             ax.text(
                 x,
-                0.82,
+                gain_y,
                 f"Gain {index + 1}",
                 color=CHARCOAL_THEME["text"],
                 ha="center",
                 va="center",
-                fontsize=13,
+                fontsize=12 if card else 13,
             )
         )
-        symbols.append(ax.text(x, 0.48, "", ha="center", va="center", fontsize=22))
+        symbols.append(
+            ax.text(x, symbol_y, "", ha="center", va="center", fontsize=22)
+        )
         labels.append(
             ax.text(
                 x,
-                0.16,
+                label_y,
                 "",
                 color=CHARCOAL_THEME["text"],
                 ha="center",
@@ -249,10 +280,10 @@ def _style_sphere_axis(ax, title):
     ax.patch.set_alpha(0.0)
     ax.patch.set_edgecolor("none")
     ax.set_title(title, color=CHARCOAL_THEME["text"], pad=10)
-    ax.set_xlim(-1.4, 1.4)
-    ax.set_ylim(-1.4, 1.4)
-    ax.set_zlim(-1.4, 1.4)
-    ax.set_box_aspect((1.0, 1.0, 1.0))
+    ax.set_xlim(-1.15, 1.15)
+    ax.set_ylim(-1.15, 1.15)
+    ax.set_zlim(-1.15, 1.15)
+    ax.set_box_aspect((1.0, 1.0, 1.0), zoom=1.24)
     ax.set_xticks([])
     ax.set_yticks([])
     ax.set_zticks([])
@@ -276,6 +307,16 @@ def _draw_unit_sphere(ax):
     x = np.outer(np.cos(longitude), np.sin(latitude))
     y = np.outer(np.sin(longitude), np.sin(latitude))
     z = np.outer(np.ones_like(longitude), np.cos(latitude))
+    ax.plot_surface(
+        x,
+        y,
+        z,
+        color="#334155",
+        linewidth=0,
+        antialiased=True,
+        shade=False,
+        alpha=0.12,
+    )
     ax.plot_wireframe(
         x,
         y,
@@ -283,18 +324,67 @@ def _draw_unit_sphere(ax):
         rstride=3,
         cstride=3,
         color=CHARCOAL_THEME["grid"],
-        linewidth=0.55,
-        alpha=0.65,
+        linewidth=0.6,
+        alpha=0.72,
     )
 
 
-def _style_control_axis(ax, channel_count=3):
-    ax.set_facecolor(CHARCOAL_THEME["axes"])
-    ax.set_title("Control Gain", color=CHARCOAL_THEME["text"], pad=4, fontsize=13)
+def _style_control_axis(ax, channel_count=3, *, card=False):
+    ax.set_facecolor(
+        CHARCOAL_THEME["figure"] if card else CHARCOAL_THEME["axes"]
+    )
+    if card:
+        ax.set_title("")
+        frame = FancyBboxPatch(
+            (0.0, 0.0),
+            1.0,
+            1.0,
+            boxstyle="round,pad=0.012,rounding_size=0.035",
+            transform=ax.transAxes,
+            facecolor=CHARCOAL_THEME["axes"],
+            edgecolor=CHARCOAL_THEME["grid"],
+            linewidth=1.1,
+            clip_on=False,
+            zorder=-2,
+        )
+        ax.add_patch(frame)
+        ax.text(
+            0.045,
+            0.84,
+            "CONTROL GAIN",
+            transform=ax.transAxes,
+            color=CHARCOAL_THEME["text"],
+            alpha=0.78,
+            ha="left",
+            va="center",
+            fontsize=9.5,
+            fontweight="bold",
+        )
+        ax.plot(
+            [0.04, 0.96],
+            [0.72, 0.72],
+            transform=ax.transAxes,
+            color=CHARCOAL_THEME["grid"],
+            linewidth=0.8,
+            alpha=0.8,
+        )
+        for index in range(1, channel_count):
+            ax.plot(
+                [index, index],
+                [0.10, 0.64],
+                color=CHARCOAL_THEME["grid"],
+                linewidth=0.8,
+                alpha=0.65,
+            )
+    else:
+        ax.set_title(
+            "Control Gain", color=CHARCOAL_THEME["text"], pad=4, fontsize=13
+        )
     ax.set_xlim(0.0, float(channel_count))
     ax.set_ylim(0.0, 1.0)
     ax.set_xticks([])
     ax.set_yticks([])
     ax.grid(False)
     for spine in ax.spines.values():
+        spine.set_visible(not card)
         spine.set_color(CHARCOAL_THEME["grid"])
