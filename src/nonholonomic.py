@@ -16,8 +16,10 @@ from scipy.linalg import expm
 from charcoal_animation import (
     CHARCOAL_THEME,
     add_control_state_artists,
+    add_trajectory_artists,
     align_control_panel,
     update_control_state_artists,
+    update_trajectory_artists,
 )
 from hybrid_solution import HybridSolution
 
@@ -321,7 +323,10 @@ class Nonholonomic:
         """Plot the obstacle, target, and vehicle at its final state."""
         z = solution.y[:2]
         psi = solution.y[2:4]
-        fig, ax = plt.subplots(figsize=(7, 7))
+        fig = plt.figure(figsize=(7, 8.5))
+        grid = fig.add_gridspec(2, 1, height_ratios=(5.2, 1.4), hspace=0.18)
+        ax = fig.add_subplot(grid[0, 0])
+        ax_trajectory = fig.add_subplot(grid[1, 0])
         self._style_axis(fig, ax, z)
         ax.add_patch(self._obstacle_patch())
         ax.scatter(
@@ -340,7 +345,14 @@ class Nonholonomic:
         self._update_vehicle_gain_color(
             vehicle_artists, self.control_gain(solution.t[-1])
         )
-        return fig, ax
+        add_trajectory_artists(
+            ax_trajectory,
+            solution.t,
+            z.T,
+            (r"$z_1$", r"$z_2$"),
+        )
+        align_control_panel(ax, ax_trajectory)
+        return fig, (ax, ax_trajectory)
 
     def animate(self, solution, frame_count=360, interval=35, repeat_delay=1200):
         """Animate the vehicle heading and unknown control direction."""
@@ -354,10 +366,11 @@ class Nonholonomic:
         psi = states[2:4]
         theta = np.array([[self.control_gain(time)] for time in times])
 
-        fig = plt.figure(figsize=(7, 8), constrained_layout=True)
-        grid = fig.add_gridspec(2, 1, height_ratios=(4.8, 1.15))
+        fig = plt.figure(figsize=(7, 10), constrained_layout=True)
+        grid = fig.add_gridspec(3, 1, height_ratios=(4.8, 1.35, 1.15))
         ax = fig.add_subplot(grid[0, 0])
-        ax_theta = fig.add_subplot(grid[1, 0])
+        ax_trajectory = fig.add_subplot(grid[1, 0])
+        ax_theta = fig.add_subplot(grid[2, 0])
         self._style_axis(fig, ax, z)
         ax.add_patch(self._obstacle_patch())
         ax.scatter(
@@ -383,6 +396,13 @@ class Nonholonomic:
             fontsize=14,
         )
         control_artists = add_control_state_artists(ax_theta, theta, card=True)
+        trajectory_artists = add_trajectory_artists(
+            ax_trajectory,
+            times,
+            z.T,
+            (r"$z_1$", r"$z_2$"),
+        )
+        align_control_panel(ax, ax_trajectory)
         align_control_panel(ax, ax_theta)
 
         vehicle_scale = self._vehicle_scale(z)
@@ -397,7 +417,10 @@ class Nonholonomic:
 
             status.set_text(f"t = {times[frame_index]:.2f}")
             panel = update_control_state_artists(control_artists, theta, frame_index)
-            return *vehicle_artists["all"], status, *panel
+            path = update_trajectory_artists(
+                trajectory_artists, times, z.T, frame_index
+            )
+            return *vehicle_artists["all"], status, *path, *panel
 
         update(0)
         animation = FuncAnimation(

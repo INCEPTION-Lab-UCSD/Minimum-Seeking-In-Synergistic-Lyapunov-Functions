@@ -6,7 +6,11 @@ from matplotlib.animation import FuncAnimation
 from scipy.integrate import solve_ivp
 from scipy.linalg import expm
 
-from charcoal_animation import CHARCOAL_THEME
+from charcoal_animation import (
+    CHARCOAL_THEME,
+    add_trajectory_artists,
+    update_trajectory_artists,
+)
 from hybrid_solution import HybridSolution
 
 
@@ -284,19 +288,19 @@ class Sphere_2D:
         t = solution.t
         p_1 = solution.y[0]
         p_2 = solution.y[1]
-        theta = np.array([self.control_gain(t_i) for t_i in t])
-
-        fig = plt.figure(figsize=(10, 4))
-        ax_unit_circle = fig.add_subplot()
-
-        theta = np.linspace(0.0, 2 * np.pi, 200)
-
-        circle_x = np.cos(theta)
-        circle_y = np.sin(theta)
-        ax_unit_circle.plot(circle_x, circle_y, color="black")
-        ax_unit_circle.scatter(p_1[-1], p_2[-1], color="red")
-
-        return fig, ax_unit_circle
+        fig = plt.figure(figsize=(7, 8.5), facecolor=CHARCOAL_THEME["figure"])
+        grid = fig.add_gridspec(2, 1, height_ratios=(5.2, 1.4), hspace=0.18)
+        ax_unit_circle = fig.add_subplot(grid[0, 0])
+        ax_trajectory = fig.add_subplot(grid[1, 0])
+        artists = self._setup_unit_circle_ax(ax_unit_circle)
+        artists["point"].set_data([p_1[-1]], [p_2[-1]])
+        add_trajectory_artists(
+            ax_trajectory,
+            t,
+            np.column_stack((p_1, p_2)),
+            (r"$p_1$", r"$p_2$"),
+        )
+        return fig, (ax_unit_circle, ax_trajectory)
 
     def animate(self, solution, frame_step=25, interval=40, repeat_delay=1200):
         frame_step = int(frame_step)
@@ -307,10 +311,17 @@ class Sphere_2D:
         if frames[-1] != len(solution.t) - 1:
             frames = np.r_[frames, len(solution.t) - 1]
 
-        fig, ax_unit_circle = plt.subplots(
-            figsize=(7, 7), facecolor=CHARCOAL_THEME["figure"]
-        )
+        fig = plt.figure(figsize=(7, 8.5), facecolor=CHARCOAL_THEME["figure"])
+        grid = fig.add_gridspec(2, 1, height_ratios=(5.2, 1.4), hspace=0.18)
+        ax_unit_circle = fig.add_subplot(grid[0, 0])
+        ax_trajectory = fig.add_subplot(grid[1, 0])
         artists = self._setup_unit_circle_ax(ax_unit_circle)
+        trajectory = add_trajectory_artists(
+            ax_trajectory,
+            solution.t,
+            solution.y[:2].T,
+            (r"$p_1$", r"$p_2$"),
+        )
 
         def update(frame_idx):
             t = solution.t[frame_idx]
@@ -324,7 +335,10 @@ class Sphere_2D:
             artists["status"].set_text(f"t = {t:.2f}")
             artists["control_gain"].set_text(f"CONTROL GAIN\n{gain_name}  {gain:+.0f}")
             artists["control_gain"].set_color(gain_color)
-            return tuple(artists.values())
+            trajectory_artists = update_trajectory_artists(
+                trajectory, solution.t, solution.y[:2].T, frame_idx
+            )
+            return *artists.values(), *trajectory_artists
 
         update(frames[0])
         animation = FuncAnimation(
@@ -334,7 +348,6 @@ class Sphere_2D:
             interval=interval,
             repeat_delay=repeat_delay,
         )
-        fig.tight_layout()
         return fig, animation
 
     def _setup_unit_circle_ax(self, ax, point_color=None):

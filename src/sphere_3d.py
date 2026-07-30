@@ -6,10 +6,12 @@ from scipy.linalg import expm
 from charcoal_animation import (
     CHARCOAL_THEME,
     add_control_state_artists,
+    add_trajectory_artists,
     create_drone_artists_3d,
     create_sphere_animation_figure,
     position_drone_artists_3d,
     update_control_state_artists,
+    update_trajectory_artists,
 )
 from hybrid_solution import HybridSolution
 
@@ -252,7 +254,9 @@ class Sphere_3D:
         attitudes = self._vehicle_attitudes(directions)
         gains = np.vstack([self.get_control_gain(t) for t in times])
 
-        fig, ax, ax_control = create_sphere_animation_figure(r"$S^2$ Stabilization")
+        fig, ax, ax_trajectory, ax_control = create_sphere_animation_figure(
+            r"$S^2$ Stabilization"
+        )
         start = directions[0]
         ax.scatter(
             *start,
@@ -284,6 +288,12 @@ class Sphere_3D:
             text.set_color(CHARCOAL_THEME["text"])
 
         control_artists = add_control_state_artists(ax_control, gains)
+        trajectory_artists = add_trajectory_artists(
+            ax_trajectory,
+            times,
+            directions,
+            (r"$p_1$", r"$p_2$", r"$p_3$"),
+        )
 
         def update(frame_index):
             direction = directions[frame_index]
@@ -297,7 +307,10 @@ class Sphere_3D:
             panel_artists = update_control_state_artists(
                 control_artists, gains, frame_index
             )
-            return *drone_artists, status, *panel_artists
+            path_artists = update_trajectory_artists(
+                trajectory_artists, times, directions, frame_index
+            )
+            return *drone_artists, status, *path_artists, *panel_artists
 
         animation = FuncAnimation(
             fig,

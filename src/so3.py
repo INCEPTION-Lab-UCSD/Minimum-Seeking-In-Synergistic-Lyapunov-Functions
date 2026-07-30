@@ -6,10 +6,12 @@ from scipy.linalg import expm
 from charcoal_animation import (
     CHARCOAL_THEME,
     add_control_state_artists,
+    add_trajectory_artists,
     create_drone_artists_3d,
     create_sphere_animation_figure,
     position_drone_artists_3d,
     update_control_state_artists,
+    update_trajectory_artists,
 )
 from hybrid_solution import HybridSolution
 
@@ -272,9 +274,12 @@ class SO3:
             self._project_so3(self._matrix(states[:9, index]))
             for index in range(frame_count)
         ]
+        directions = np.vstack([attitude[:, 2] for attitude in attitudes])
         gains = np.vstack([self._get_control_gain(t) for t in times])
 
-        fig, ax, ax_control = create_sphere_animation_figure(r"$SO(3)$  Stabilization")
+        fig, ax, ax_trajectory, ax_control = create_sphere_animation_figure(
+            r"$SO(3)$  Stabilization"
+        )
         target_direction = self.R_target[:, 2]
         ax.scatter(
             *target_direction,
@@ -318,6 +323,12 @@ class SO3:
             text.set_color(CHARCOAL_THEME["text"])
 
         control_artists = add_control_state_artists(ax_control, gains)
+        trajectory_artists = add_trajectory_artists(
+            ax_trajectory,
+            times,
+            directions,
+            (r"$r_{13}$", r"$r_{23}$", r"$r_{33}$"),
+        )
 
         def update(frame_index):
             attitude = attitudes[frame_index]
@@ -329,9 +340,13 @@ class SO3:
             panel_artists = update_control_state_artists(
                 control_artists, gains, frame_index
             )
+            path_artists = update_trajectory_artists(
+                trajectory_artists, times, directions, frame_index
+            )
             return (
                 *drone_artists,
                 status,
+                *path_artists,
                 *panel_artists,
             )
 

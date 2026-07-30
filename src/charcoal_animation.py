@@ -16,17 +16,108 @@ CHARCOAL_THEME = {
     "cmap": "viridis",
 }
 
+TRAJECTORY_COLORS = (
+    CHARCOAL_THEME["trajectory"],
+    CHARCOAL_THEME["target"],
+    "#38BDF8",
+    "#FBBF24",
+)
+
 
 def create_sphere_animation_figure(title):
-    fig = plt.figure(figsize=(7, 8), facecolor=CHARCOAL_THEME["figure"])
-    grid = fig.add_gridspec(2, 1, height_ratios=(5.6, 1.0), hspace=0.08)
+    fig = plt.figure(figsize=(7, 9.5), facecolor=CHARCOAL_THEME["figure"])
+    grid = fig.add_gridspec(
+        3, 1, height_ratios=(5.6, 1.35, 1.0), hspace=0.28
+    )
     ax_sphere = fig.add_subplot(grid[0, 0], projection="3d")
-    ax_control = fig.add_subplot(grid[1, 0])
+    ax_trajectory = fig.add_subplot(grid[1, 0])
+    ax_control = fig.add_subplot(grid[2, 0])
 
     _style_sphere_axis(ax_sphere, title)
     _draw_unit_sphere(ax_sphere)
+    _style_trajectory_axis(ax_trajectory)
     _style_control_axis(ax_control)
-    return fig, ax_sphere, ax_control
+    return fig, ax_sphere, ax_trajectory, ax_control
+
+
+def add_trajectory_artists(ax, times, values, labels):
+    """Create a progressive time-trajectory plot on a dedicated axis."""
+    times = np.asarray(times, dtype=float).reshape(-1)
+    values = np.asarray(values, dtype=float)
+    if values.ndim == 1:
+        values = values[:, np.newaxis]
+    if values.shape[0] != times.size:
+        raise ValueError("values must have one row per time")
+    if values.shape[1] != len(labels):
+        raise ValueError("labels must contain one entry per trajectory channel")
+
+    _style_trajectory_axis(ax)
+    lines = [
+        ax.plot(
+            [],
+            [],
+            color=TRAJECTORY_COLORS[index % len(TRAJECTORY_COLORS)],
+            linewidth=1.7,
+            label=label,
+        )[0]
+        for index, label in enumerate(labels)
+    ]
+    points = [
+        ax.plot(
+            [],
+            [],
+            marker="o",
+            linestyle="none",
+            color=TRAJECTORY_COLORS[index % len(TRAJECTORY_COLORS)],
+            markersize=3.5,
+        )[0]
+        for index in range(values.shape[1])
+    ]
+    cursor = ax.axvline(
+        times[0],
+        color=CHARCOAL_THEME["initial"],
+        linewidth=1.0,
+        alpha=0.65,
+    )
+
+    ax.set_xlim(times[0], times[-1])
+    finite_values = values[np.isfinite(values)]
+    if finite_values.size:
+        lower = float(finite_values.min())
+        upper = float(finite_values.max())
+        span = upper - lower
+        margin = 0.08 * span if span > 1e-9 else max(0.1, 0.08 * abs(upper))
+        ax.set_ylim(lower - margin, upper + margin)
+
+    legend = ax.legend(
+        loc="upper right",
+        frameon=False,
+        ncol=min(values.shape[1], 3),
+        fontsize=8.5,
+    )
+    for text in legend.get_texts():
+        text.set_color(CHARCOAL_THEME["text"])
+
+    artists = {
+        "lines": lines,
+        "points": points,
+        "cursor": cursor,
+        "all": [*lines, *points, cursor],
+    }
+    update_trajectory_artists(artists, times, values, len(times) - 1)
+    return artists
+
+
+def update_trajectory_artists(artists, times, values, frame_index):
+    """Show the trajectory history through ``frame_index``."""
+    end = int(frame_index) + 1
+    for channel, line in enumerate(artists["lines"]):
+        line.set_data(times[:end], values[:end, channel])
+        artists["points"][channel].set_data(
+            [times[frame_index]], [values[frame_index, channel]]
+        )
+    artists["cursor"].set_xdata([times[frame_index], times[frame_index]])
+    return tuple(artists["all"])
 
 
 def add_control_state_artists(ax, gains, *, card=False):
@@ -301,6 +392,25 @@ def _style_sphere_axis(ax, title):
         axis._axinfo["axisline"]["color"] = edge_color
 
 
+def _style_trajectory_axis(ax):
+    ax.set_facecolor(CHARCOAL_THEME["axes"])
+    for spine in ax.spines.values():
+        spine.set_color(CHARCOAL_THEME["grid"])
+    ax.tick_params(colors=CHARCOAL_THEME["text"], labelsize=8)
+    ax.xaxis.label.set_color(CHARCOAL_THEME["text"])
+    ax.yaxis.label.set_color(CHARCOAL_THEME["text"])
+    ax.set_title(
+        "STATE TRAJECTORY",
+        color=CHARCOAL_THEME["text"],
+        fontsize=9.5,
+        fontweight="bold",
+        loc="left",
+        pad=5,
+    )
+    ax.set_xlabel("t", fontsize=8)
+    ax.grid(True, color=CHARCOAL_THEME["grid"], alpha=0.45, linewidth=0.7)
+
+
 def _draw_unit_sphere(ax):
     longitude = np.linspace(0.0, 2.0 * np.pi, 36)
     latitude = np.linspace(0.0, np.pi, 19)
@@ -378,7 +488,7 @@ def _style_control_axis(ax, channel_count=3, *, card=False):
             )
     else:
         ax.set_title(
-            "Control Gain", color=CHARCOAL_THEME["text"], pad=4, fontsize=13
+            "Control Gain", color=CHARCOAL_THEME["text"], pad=-2, fontsize=13
         )
     ax.set_xlim(0.0, float(channel_count))
     ax.set_ylim(0.0, 1.0)

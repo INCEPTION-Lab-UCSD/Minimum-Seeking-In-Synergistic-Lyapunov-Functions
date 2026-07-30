@@ -135,13 +135,19 @@ def render_so3_animation(
 
     times = np.linspace(t_start, t_end, frame_count)
     states = solution(times)
+    rotations = [
+        simulation._project_so3(simulation._matrix(states[:9, index]))
+        for index in range(frame_count)
+    ]
+    directions = np.vstack([rotation[:, 2] for rotation in rotations])
     gains = np.vstack([simulation._get_control_gain(time) for time in times])
-    renderer = mujoco.Renderer(model, height=height, width=width)
+    scene_height = max(1, int(round(0.68 * height)))
+    renderer = mujoco.Renderer(model, height=scene_height, width=width)
     writer = _video_writer(output, fps)
 
     try:
         for index, time in enumerate(times):
-            rotation = simulation._project_so3(simulation._matrix(states[:9, index]))
+            rotation = rotations[index]
             data.qpos[free_qpos : free_qpos + 3] = (0.0, 0.0, 1.25)
             data.qpos[free_qpos + 3 : free_qpos + 7] = rotation_to_mujoco_quaternion(
                 rotation
@@ -166,6 +172,10 @@ def render_so3_animation(
                 ),
                 error_degrees=attitude_error_degrees(rotation, simulation.R_target),
                 gains=gains[index],
+                output_height=height,
+                trajectory_times=times,
+                trajectory_values=directions,
+                frame_index=index,
             )
             writer.append_data(annotated)
     finally:
@@ -199,8 +209,15 @@ def _annotate_frame(
     gap: float,
     error_degrees: float,
     gains: np.ndarray,
+    output_height: int,
+    trajectory_times: np.ndarray,
+    trajectory_values: np.ndarray,
+    frame_index: int,
 ) -> np.ndarray:
-    image = Image.fromarray(frame)
+    scene_image = Image.fromarray(frame)
+    width, scene_height = scene_image.size
+    image = Image.new("RGB", (width, output_height), (17, 19, 24))
+    image.paste(scene_image, (0, 0))
     draw = ImageDraw.Draw(image, "RGBA")
     width, height = image.size
     scale = min(width / 960.0, height / 720.0)
@@ -325,8 +342,23 @@ def _annotate_frame(
     gain_panel_width = gain_width + 2 * gain_padding_x
     gain_panel_height = gain_height + 2 * gain_padding_y
     gain_left = (width - gain_panel_width) // 2
-    gain_bottom = height - int(42 * scale)
+    gain_bottom = height - int(10 * scale)
     gain_top = gain_bottom - gain_panel_height
+    trajectory_top = scene_height + int(8 * scale)
+    trajectory_bottom = gain_top - int(8 * scale)
+    _draw_trajectory_panel(
+        draw,
+        (
+            int(24 * scale),
+            trajectory_top,
+            width - int(24 * scale),
+            trajectory_bottom,
+        ),
+        trajectory_times,
+        trajectory_values,
+        frame_index,
+        scale,
+    )
     draw.rounded_rectangle(
         (gain_left, gain_top, gain_left + gain_panel_width, gain_bottom),
         radius=int(12 * scale),
@@ -342,6 +374,115 @@ def _annotate_frame(
         anchor="mt",
     )
     return np.asarray(image)
+
+
+def _draw_trajectory_panel(
+    draw,
+    bounds,
+    times,
+    values,
+    frame_index,
+    scale,
+):
+    """Draw the body z-axis component histories below the MuJoCo scene."""
+    left, top, right, bottom = bounds
+    if bottom <= top:
+        return
+
+    draw.rounded_rectangle(
+        bounds,
+        radius=max(2, int(10 * scale)),
+        fill=(8, 12, 20, 235),
+        outline=(104, 119, 142, 150),
+        width=max(1, int(1.3 * scale)),
+    )
+    title_font = _font(int(14 * scale), bold=True)
+    label_font = _font(int(12 * scale))
+    pad_x = max(8, int(18 * scale))
+    title_y = top + max(3, int(6 * scale))
+    draw.text(
+        (left + pad_x, title_y),
+        "BODY z-AXIS TRAJECTORY",
+        font=title_font,
+        fill=(221, 228, 239, 255),
+    )
+
+    colors = ((255, 77, 77, 255), (110, 231, 183, 255), (56, 189, 248, 255))
+    labels = ("x", "y", "z")
+    legend_x = right - pad_x
+    for label, color in reversed(tuple(zip(labels, colors, strict=True))):
+        label_box = draw.textbbox((0, 0), label, font=label_font)
+        label_width = label_box[2] - label_box[0]
+        legend_x -= label_width
+        draw.text((legend_x, title_y), label, font=label_font, fill=color)
+        legend_x -= max(10, int(18 * scale))
+
+    plot_left = left + pad_x
+    plot_right = right - pad_x
+    plot_top = top + max(18, int(27 * scale))
+    plot_bottom = bottom - max(7, int(10 * scale))
+    if plot_bottom <= plot_top or plot_right <= plot_left:
+        return
+
+    zero_y = int(round((plot_top + plot_bottom) / 2.0))
+    draw.line(
+        (plot_left, zero_y, plot_right, zero_y),
+        fill=(104, 119, 142, 105),
+        width=max(1, int(scale)),
+    )
+    draw.line(
+        (plot_left, plot_bottom, plot_right, plot_bottom),
+        fill=(104, 119, 142, 135),
+        width=max(1, int(scale)),
+    )
+
+    times = np.asarray(times, dtype=float)
+    values = np.asarray(values, dtype=float)
+    time_span = max(float(times[-1] - times[0]), 1e-12)
+    end = int(frame_index) + 1
+
+    for channel, color in enumerate(colors):
+        points = [
+            (
+                int(
+                    round(
+                        plot_left
+                        + (plot_right - plot_left)
+                        * (times[index] - times[0])
+                        / time_span
+                    )
+                ),
+                int(
+                    round(
+                        plot_bottom
+                        - (plot_bottom - plot_top)
+                        * (np.clip(values[index, channel], -1.0, 1.0) + 1.0)
+                        / 2.0
+                    )
+                ),
+            )
+            for index in range(end)
+        ]
+        if len(points) > 1:
+            draw.line(points, fill=color, width=max(1, int(2 * scale)), joint="curve")
+        elif points:
+            x, y = points[0]
+            radius = max(1, int(2 * scale))
+            draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=color)
+
+    cursor_x = int(
+        round(
+            plot_left
+            + (plot_right - plot_left)
+            * (times[frame_index] - times[0])
+            / time_span
+        )
+    )
+    draw.line(
+        (cursor_x, plot_top, cursor_x, plot_bottom),
+        fill=(232, 234, 237, 150),
+        width=max(1, int(scale)),
+    )
 
 
 def _font(size: int, *, bold: bool = False):
