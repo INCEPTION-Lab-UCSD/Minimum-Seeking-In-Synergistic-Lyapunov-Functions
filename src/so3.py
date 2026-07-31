@@ -7,6 +7,7 @@ from charcoal_animation import (
     CHARCOAL_THEME,
     add_control_state_artists,
     add_trajectory_artists,
+    compact_control_panel,
     create_drone_artists_3d,
     create_sphere_animation_figure,
     position_drone_artists_3d,
@@ -322,13 +323,17 @@ class SO3:
         for text in legend.get_texts():
             text.set_color(CHARCOAL_THEME["text"])
 
-        control_artists = add_control_state_artists(ax_control, gains)
+        control_artists = add_control_state_artists(
+            ax_control, gains, card=True, orientation="vertical"
+        )
         trajectory_artists = add_trajectory_artists(
             ax_trajectory,
             times,
             directions,
             (r"$r_{13}$", r"$r_{23}$", r"$r_{33}$"),
+            target_direction,
         )
+        compact_control_panel(ax, ax_control, gains.shape[1])
 
         def update(frame_index):
             attitude = attitudes[frame_index]

@@ -18,6 +18,7 @@ from charcoal_animation import (
     add_control_state_artists,
     add_trajectory_artists,
     align_control_panel,
+    compact_control_panel,
     update_control_state_artists,
     update_trajectory_artists,
 )
@@ -350,6 +351,7 @@ class Nonholonomic:
             solution.t,
             z.T,
             (r"$z_1$", r"$z_2$"),
+            self.target,
         )
         align_control_panel(ax, ax_trajectory)
         return fig, (ax, ax_trajectory)
@@ -366,11 +368,16 @@ class Nonholonomic:
         psi = states[2:4]
         theta = np.array([[self.control_gain(time)] for time in times])
 
-        fig = plt.figure(figsize=(7, 10), constrained_layout=True)
-        grid = fig.add_gridspec(3, 1, height_ratios=(4.8, 1.35, 1.15))
+        fig = plt.figure(figsize=(9, 8), constrained_layout=True)
+        grid = fig.add_gridspec(
+            2,
+            2,
+            height_ratios=(5.0, 1.55),
+            width_ratios=(4.8, 1.8),
+        )
         ax = fig.add_subplot(grid[0, 0])
-        ax_trajectory = fig.add_subplot(grid[1, 0])
-        ax_theta = fig.add_subplot(grid[2, 0])
+        ax_theta = fig.add_subplot(grid[0, 1])
+        ax_trajectory = fig.add_subplot(grid[1, :])
         self._style_axis(fig, ax, z)
         ax.add_patch(self._obstacle_patch())
         ax.scatter(
@@ -395,16 +402,17 @@ class Nonholonomic:
             family="monospace",
             fontsize=14,
         )
-        control_artists = add_control_state_artists(ax_theta, theta, card=True)
+        control_artists = add_control_state_artists(
+            ax_theta, theta, card=True, orientation="vertical"
+        )
         trajectory_artists = add_trajectory_artists(
             ax_trajectory,
             times,
             z.T,
             (r"$z_1$", r"$z_2$"),
+            self.target,
         )
-        align_control_panel(ax, ax_trajectory)
-        align_control_panel(ax, ax_theta)
-
+        compact_control_panel(ax, ax_theta, theta.shape[1])
         vehicle_scale = self._vehicle_scale(z)
 
         def update(frame_index):

@@ -8,9 +8,11 @@ from scipy.integrate import solve_ivp
 from scipy.linalg import expm
 
 from charcoal_animation import (
+    TRAJECTORY_COLORS,
     add_control_state_artists,
     add_trajectory_artists,
     align_control_panel,
+    compact_control_panel,
     update_control_state_artists,
     update_trajectory_artists,
 )
@@ -332,6 +334,7 @@ class Target_Seeking:
             solution.t,
             z.T,
             (r"$z_1$", r"$z_2$"),
+            self.target,
         )
         align_control_panel(ax, ax_trajectory)
         return fig, (ax, ax_trajectory)
@@ -364,6 +367,14 @@ class Target_Seeking:
             linewidth=1.8,
             label="$z_2$",
         )
+        for index, target in enumerate(self.target):
+            ax_z.axhline(
+                target,
+                color=TRAJECTORY_COLORS[index % len(TRAJECTORY_COLORS)],
+                linewidth=1.4,
+                linestyle=":",
+                alpha=0.9,
+            )
         ax_z.set_title("Trajectories")
         ax_z.set_ylabel("$z(t)$")
         ax_z.set_xlabel("$t$")
@@ -389,11 +400,16 @@ class Target_Seeking:
         z_full = self.diffeomorphism_inverse(solution.y[:3])
         theta = np.array([self.control_gain(t_i) for t_i in t_frames])
 
-        fig = plt.figure(figsize=(7, 10), constrained_layout=True)
-        grid = fig.add_gridspec(3, 1, height_ratios=(4.8, 1.35, 1.15))
+        fig = plt.figure(figsize=(9, 8), constrained_layout=True)
+        grid = fig.add_gridspec(
+            2,
+            2,
+            height_ratios=(5.0, 1.55),
+            width_ratios=(4.8, 1.8),
+        )
         ax = fig.add_subplot(grid[0, 0])
-        ax_trajectory = fig.add_subplot(grid[1, 0])
-        ax_theta = fig.add_subplot(grid[2, 0])
+        ax_theta = fig.add_subplot(grid[0, 1])
+        ax_trajectory = fig.add_subplot(grid[1, :])
         self._style_obstacle_axis(fig, ax, z_full)
         ax.add_patch(self._create_boulder_patch())
 
@@ -431,19 +447,17 @@ class Target_Seeking:
             fontsize=16,
         )
 
-        legend = ax.legend(loc="best", frameon=False)
-        for text in legend.get_texts():
-            text.set_color(CHARCOAL_THEME["text"])
-
-        control_artists = add_control_state_artists(ax_theta, theta, card=True)
+        control_artists = add_control_state_artists(
+            ax_theta, theta, card=True, orientation="vertical"
+        )
         trajectory_artists = add_trajectory_artists(
             ax_trajectory,
             t_frames,
             z.T,
             (r"$z_1$", r"$z_2$"),
+            self.target,
         )
-        align_control_panel(ax, ax_trajectory)
-        align_control_panel(ax, ax_theta)
+        compact_control_panel(ax, ax_theta, theta.shape[1])
 
         def update(frame_idx):
             x = z[0, frame_idx]

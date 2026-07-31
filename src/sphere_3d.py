@@ -7,6 +7,7 @@ from charcoal_animation import (
     CHARCOAL_THEME,
     add_control_state_artists,
     add_trajectory_artists,
+    compact_control_panel,
     create_drone_artists_3d,
     create_sphere_animation_figure,
     position_drone_artists_3d,
@@ -283,17 +284,17 @@ class Sphere_3D:
             va="top",
             fontsize=12,
         )
-        legend = ax.legend(loc="upper right", frameon=False)
-        for text in legend.get_texts():
-            text.set_color(CHARCOAL_THEME["text"])
-
-        control_artists = add_control_state_artists(ax_control, gains)
+        control_artists = add_control_state_artists(
+            ax_control, gains, card=True, orientation="vertical"
+        )
         trajectory_artists = add_trajectory_artists(
             ax_trajectory,
             times,
             directions,
             (r"$p_1$", r"$p_2$", r"$p_3$"),
+            self.target,
         )
+        compact_control_panel(ax, ax_control, gains.shape[1])
 
         def update(frame_index):
             direction = directions[frame_index]

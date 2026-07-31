@@ -30,7 +30,7 @@ def run_sphere_2d():
 
     _, animation = simulation.animate(solution)
 
-    animation.save(filename="../Animations/circle.gif")
+    # animation.save(filename="./Animations/circle.gif")
 
     plt.show()
     return animation
@@ -207,7 +207,7 @@ def run_nonholonomic(show=True):
     _, animation = simulation.animate(solution)
     if show:
         plt.show()
-    animation.save(filename="./Animations/nonholonomic.gif")
+    # animation.save(filename="./Animations/nonholonomic.gif")
     return animation
 
 
@@ -215,5 +215,5 @@ if __name__ == "__main__":
     # run_sphere_2d()
     # run_obstacle_avoidance()
     # sphere_animation = run_sphere_3d()
-    so3_animation = run_so3()
-    # run_nonholonomic()
+    # so3_animation = run_so3()
+    run_nonholonomic()

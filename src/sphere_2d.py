@@ -299,6 +299,7 @@ class Sphere_2D:
             t,
             np.column_stack((p_1, p_2)),
             (r"$p_1$", r"$p_2$"),
+            self.p_target,
         )
         return fig, (ax_unit_circle, ax_trajectory)
 
@@ -321,6 +322,7 @@ class Sphere_2D:
             solution.t,
             solution.y[:2].T,
             (r"$p_1$", r"$p_2$"),
+            self.p_target,
         )
 
         def update(frame_idx):
