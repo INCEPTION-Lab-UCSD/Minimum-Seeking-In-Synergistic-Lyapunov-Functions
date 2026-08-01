@@ -373,6 +373,7 @@ class Target_Seeking:
                 color=TRAJECTORY_COLORS[index % len(TRAJECTORY_COLORS)],
                 linewidth=1.4,
                 linestyle=":",
+                label=rf"${['z_1', 'z_2'][index]}^\star$",
                 alpha=0.9,
             )
         ax_z.set_title("Trajectories")
@@ -383,6 +384,8 @@ class Target_Seeking:
         align_control_panel(ax_z, ax_theta)
 
         legend = ax_z.legend(
+            handles=[*ax_z.lines[:2], *ax_z.lines[2:]],
+            labels=[r"$z_1$", r"$z_2$", r"$z_1^\star$", r"$z_2^\star$"],
             loc="lower right",
             bbox_to_anchor=(1.0, 1.02),
             borderaxespad=0.0,
@@ -390,6 +393,7 @@ class Target_Seeking:
             facecolor=CHARCOAL_THEME["axes"],
             edgecolor=CHARCOAL_THEME["grid"],
             framealpha=0.95,
+            ncol=2,
         )
         legend.set_zorder(10)
         for text in legend.get_texts():

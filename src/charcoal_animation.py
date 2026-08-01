@@ -2,6 +2,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import FancyBboxPatch
+from matplotlib.lines import Line2D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 CHARCOAL_THEME = {
@@ -97,7 +98,7 @@ def add_trajectory_artists(ax, times, values, labels, target_values=None):
                 linewidth=1.4,
                 # Shift each dot pattern so coincident targets remain visible.
                 linestyle=(index * 1.5, (1.0, 2.8)),
-                label=rf"target {index + 1}",
+                label=rf"${labels[index].strip('$')}^\star$",
                 alpha=0.9,
             )
             for index, target in enumerate(target_values)
@@ -123,7 +124,20 @@ def add_trajectory_artists(ax, times, values, labels, target_values=None):
         margin = 0.08 * span if span > 1e-9 else max(0.1, 0.08 * abs(upper))
         ax.set_ylim(lower - margin, upper + margin)
 
+    target_legend_handles = [
+        Line2D(
+            [],
+            [],
+            color=TRAJECTORY_COLORS[index % len(TRAJECTORY_COLORS)],
+            linewidth=1.4,
+            linestyle=":",
+        )
+        for index in range(len(targets))
+    ]
     legend = ax.legend(
+        handles=[*lines, *target_legend_handles],
+        labels=[line.get_label() for line in lines]
+        + [target.get_label() for target in targets],
         loc="lower right",
         bbox_to_anchor=(1.0, 1.02),
         borderaxespad=0.0,
@@ -131,7 +145,7 @@ def add_trajectory_artists(ax, times, values, labels, target_values=None):
         facecolor=CHARCOAL_THEME["axes"],
         edgecolor=CHARCOAL_THEME["grid"],
         framealpha=0.95,
-        ncol=min(values.shape[1], 3),
+        ncol=2,
         fontsize=8.5,
     )
     legend.set_zorder(10)
