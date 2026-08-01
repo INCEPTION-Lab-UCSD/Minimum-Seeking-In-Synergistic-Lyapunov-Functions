@@ -1,8 +1,8 @@
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.patches import FancyBboxPatch
 from matplotlib.lines import Line2D
+from matplotlib.patches import FancyBboxPatch
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 CHARCOAL_THEME = {
@@ -548,7 +548,7 @@ def _style_trajectory_axis(ax):
         pad=5,
     )
     ax.set_xlabel("t", fontsize=8)
-    ax.grid(True, color=CHARCOAL_THEME["grid"], alpha=0.45, linewidth=0.7)
+    ax.grid(False)
 
 
 def _draw_unit_sphere(ax):
