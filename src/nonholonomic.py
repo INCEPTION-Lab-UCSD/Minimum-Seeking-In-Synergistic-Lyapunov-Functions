@@ -1,10 +1,3 @@
-"""Hybrid minimum-seeking control for a planar nonholonomic vehicle.
-
-The module name keeps the repository's original ``nonholomonic`` spelling for
-backwards compatibility.  The model implemented here is the nonholonomic
-system from equations (35)--(38) of the accompanying paper.
-"""
-
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FuncAnimation

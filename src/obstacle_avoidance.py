@@ -382,7 +382,16 @@ class Target_Seeking:
         add_control_state_artists(ax_theta, theta, card=True)
         align_control_panel(ax_z, ax_theta)
 
-        legend = ax_z.legend(loc="best", frameon=False)
+        legend = ax_z.legend(
+            loc="lower right",
+            bbox_to_anchor=(1.0, 1.02),
+            borderaxespad=0.0,
+            frameon=True,
+            facecolor=CHARCOAL_THEME["axes"],
+            edgecolor=CHARCOAL_THEME["grid"],
+            framealpha=0.95,
+        )
+        legend.set_zorder(10)
         for text in legend.get_texts():
             text.set_color(CHARCOAL_THEME["text"])
 

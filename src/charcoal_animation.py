@@ -62,7 +62,9 @@ def add_trajectory_artists(ax, times, values, labels, target_values=None):
     if target_values is not None:
         target_values = np.asarray(target_values, dtype=float).reshape(-1)
         if target_values.size != values.shape[1]:
-            raise ValueError("target_values must contain one entry per trajectory channel")
+            raise ValueError(
+                "target_values must contain one entry per trajectory channel"
+            )
 
     _style_trajectory_axis(ax)
     lines = [
@@ -93,7 +95,9 @@ def add_trajectory_artists(ax, times, values, labels, target_values=None):
                 target,
                 color=TRAJECTORY_COLORS[index % len(TRAJECTORY_COLORS)],
                 linewidth=1.4,
-                linestyle=":",
+                # Shift each dot pattern so coincident targets remain visible.
+                linestyle=(index * 1.5, (1.0, 2.8)),
+                label=rf"target {index + 1}",
                 alpha=0.9,
             )
             for index, target in enumerate(target_values)
@@ -120,11 +124,17 @@ def add_trajectory_artists(ax, times, values, labels, target_values=None):
         ax.set_ylim(lower - margin, upper + margin)
 
     legend = ax.legend(
-        loc="upper right",
-        frameon=False,
+        loc="lower right",
+        bbox_to_anchor=(1.0, 1.02),
+        borderaxespad=0.0,
+        frameon=True,
+        facecolor=CHARCOAL_THEME["axes"],
+        edgecolor=CHARCOAL_THEME["grid"],
+        framealpha=0.95,
         ncol=min(values.shape[1], 3),
         fontsize=8.5,
     )
+    legend.set_zorder(10)
     for text in legend.get_texts():
         text.set_color(CHARCOAL_THEME["text"])
 
@@ -151,9 +161,7 @@ def update_trajectory_artists(artists, times, values, frame_index):
     return tuple(artists["all"])
 
 
-def add_control_state_artists(
-    ax, gains, *, card=False, orientation="horizontal"
-):
+def add_control_state_artists(ax, gains, *, card=False, orientation="horizontal"):
     gains = np.asarray(gains, dtype=float)
     if gains.ndim != 2:
         raise ValueError("gains must have shape (frame_count, channel_count)")
@@ -161,9 +169,7 @@ def add_control_state_artists(
     if orientation not in {"horizontal", "vertical"}:
         raise ValueError("orientation must be 'horizontal' or 'vertical'")
 
-    _style_control_axis(
-        ax, gains.shape[1], card=card, orientation=orientation
-    )
+    _style_control_axis(ax, gains.shape[1], card=card, orientation=orientation)
     artists = _add_directional_state_artists(
         ax, gains.shape[1], card=card, orientation=orientation
     )
@@ -209,7 +215,7 @@ def align_control_panel(ax_reference, ax_control):
 
 
 def compact_control_panel(ax_reference, ax_control, channel_count):
-    """Size a sidebar to its header and number of control rows."""
+    """Size and vertically center a sidebar in the reference panel."""
     if channel_count < 1:
         raise ValueError("channel_count must be positive")
 
@@ -235,7 +241,7 @@ def compact_control_panel(ax_reference, ax_control, channel_count):
     ax_control.set_position(
         (
             control_position.x0,
-            reference_position.y1 - target_height,
+            reference_position.y0 + 0.5 * (reference_position.height - target_height),
             control_position.width,
             target_height,
         )
@@ -311,9 +317,7 @@ def _add_directional_state_artists(
                 fontsize=12 if card else 13,
             )
         )
-        symbols.append(
-            ax.text(x, symbol_y, "", ha="center", va="center", fontsize=22)
-        )
+        symbols.append(ax.text(x, symbol_y, "", ha="center", va="center", fontsize=22))
         labels.append(
             ax.text(
                 x,
@@ -561,17 +565,15 @@ def _draw_unit_sphere(ax):
     )
 
 
-def _style_control_axis(
-    ax, channel_count=3, *, card=False, orientation="horizontal"
-):
-    ax.set_facecolor(
-        CHARCOAL_THEME["figure"] if card else CHARCOAL_THEME["axes"]
-    )
+def _style_control_axis(ax, channel_count=3, *, card=False, orientation="horizontal"):
+    ax.set_facecolor(CHARCOAL_THEME["figure"] if card else CHARCOAL_THEME["axes"])
     if card:
         ax.set_title("")
-        header_center, divider_y, _, separators = _vertical_control_layout(
-            channel_count
-        ) if orientation == "vertical" else (0.84, 0.72, (), ())
+        header_center, divider_y, _, separators = (
+            _vertical_control_layout(channel_count)
+            if orientation == "vertical"
+            else (0.84, 0.72, (), ())
+        )
         frame = FancyBboxPatch(
             (0.0, 0.0),
             1.0,
@@ -624,9 +626,7 @@ def _style_control_axis(
                     alpha=0.65,
                 )
     else:
-        ax.set_title(
-            "Control Gain", color=CHARCOAL_THEME["text"], pad=-2, fontsize=13
-        )
+        ax.set_title("Control Gain", color=CHARCOAL_THEME["text"], pad=-2, fontsize=13)
     ax.set_xlim(0.0, 1.0 if orientation == "vertical" else float(channel_count))
     ax.set_ylim(0.0, 1.0)
     ax.set_xticks([])

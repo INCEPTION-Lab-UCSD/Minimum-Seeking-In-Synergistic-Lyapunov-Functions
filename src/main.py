@@ -214,6 +214,6 @@ def run_nonholonomic(show=True):
 if __name__ == "__main__":
     # run_sphere_2d()
     # run_obstacle_avoidance()
-    # sphere_animation = run_sphere_3d()
+    sphere_animation = run_sphere_3d()
     # so3_animation = run_so3()
-    run_nonholonomic()
+    # run_nonholonomic()
