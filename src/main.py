@@ -1,4 +1,5 @@
 import math
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,8 +11,18 @@ import so3
 import sphere_2d
 import sphere_3d
 
+ANIMATIONS_DIR = Path(__file__).resolve().parent.parent / "Animations"
 
-def run_sphere_2d():
+
+def _save_animation(animation, filename):
+    """Save an animation relative to the repository's Animations directory."""
+    output_path = ANIMATIONS_DIR / filename
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    animation.save(output_path)
+    return output_path
+
+
+def run_sphere_2d(save=False, show=True):
     p0 = np.array([0, -1])
     eta0 = np.array([1, 0])
     q0 = 1
@@ -30,13 +41,15 @@ def run_sphere_2d():
 
     _, animation = simulation.animate(solution)
 
-    animation.save(filename="./Animations/circle.gif")
+    if save:
+        _save_animation(animation, "circle.gif")
 
-    plt.show()
+    if show:
+        plt.show()
     return animation
 
 
-def run_obstacle_avoidance(save=False):
+def run_obstacle_avoidance(show=True, save=False):
     z0 = np.array([0, -4], dtype=float)
     target = np.array([0, 2], dtype=float)
     q0 = 1
@@ -77,13 +90,14 @@ def run_obstacle_avoidance(save=False):
     _, animation = simulation.animate_obstacle_avoidance(solution)
 
     if save:
-        animation.save("./Animations/obstacle_avoidance.gif")
+        _save_animation(animation, "obstacle_avoidance.gif")
 
-    plt.show()
+    if show:
+        plt.show()
     return animation
 
 
-def run_sphere_3d(show=True):
+def run_sphere_3d(show=True, save=False):
     control_gains_constants = np.array([3.0, 2.0, 1.0])
     target = np.array([0, 0, 1], dtype=float)
     gamma = 1.0
@@ -118,12 +132,14 @@ def run_sphere_3d(show=True):
 
     solution = simulation.solve()
     _, animation = simulation.animate(solution, frame_count=1000)
+    if save:
+        _save_animation(animation, "sphere_3d.mp4")
     if show:
         plt.show()
     return animation
 
 
-def run_so3(show=True):
+def run_so3(show=True, save=False):
     p0 = np.diag([-1.0, 1.0, -1.0]).reshape(-1, order="F")
     eta0 = np.tile(np.array([1.0, 0.0]), (3, 1))
     q0 = 1
@@ -159,12 +175,14 @@ def run_so3(show=True):
 
     solution = simulation.solve()
     _, animation = simulation.animate(solution, frame_count=1000)
+    if save:
+        _save_animation(animation, "so3.mp4")
     if show:
         plt.show()
     return animation
 
 
-def run_nonholonomic(show=True):
+def run_nonholonomic(show=True, save=False):
     z0 = np.array([-2, 0], dtype=float)
     psi0 = np.array([1, 0], dtype=float)
     eta0 = np.array([1, 0], dtype=float)
@@ -205,15 +223,16 @@ def run_nonholonomic(show=True):
 
     solution = simulation.solve()
     _, animation = simulation.animate(solution)
+    if save:
+        _save_animation(animation, "nonholonomic.gif")
     if show:
         plt.show()
-    # animation.save(filename="./Animations/nonholonomic.gif")
     return animation
 
 
 if __name__ == "__main__":
-    run_sphere_2d()
+    # run_sphere_2d()
     # run_obstacle_avoidance()
     # sphere_animation = run_sphere_3d()
-    # so3_animation = run_so3()
+    so3_animation = run_so3()
     # run_nonholonomic()

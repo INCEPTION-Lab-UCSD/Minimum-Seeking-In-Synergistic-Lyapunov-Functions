@@ -45,6 +45,18 @@ def create_sphere_animation_figure(title):
 
     _style_sphere_axis(ax_sphere, title)
     _draw_unit_sphere(ax_sphere)
+    # The 3D projection has a little unused space above the sphere. Lower the
+    # complete upper-left panel so the sphere sits more naturally in the frame.
+    fig.canvas.draw()
+    sphere_position = ax_sphere.get_position().frozen()
+    ax_sphere.set_position(
+        (
+            sphere_position.x0,
+            sphere_position.y0 - 0.045,
+            sphere_position.width,
+            sphere_position.height,
+        )
+    )
     _style_trajectory_axis(ax_trajectory)
     return fig, ax_sphere, ax_trajectory, ax_control
 

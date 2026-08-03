@@ -45,15 +45,18 @@ _MODEL_XML = r"""
     <geom type="capsule" fromto="-1.55 0 0.05 1.55 0 0.05" size="0.012" rgba="0.45 0.16 0.18 0.65"/>
     <geom type="capsule" fromto="0 -1.55 0.05 0 1.55 0.05" size="0.012" rgba="0.16 0.42 0.24 0.65"/>
 
+    <!-- Aim above the sphere and narrow the view so it is larger but stays clear
+         of the annotation and trajectory legends below the scene. -->
     <camera name="hero" pos="4 -6 3.2"
-            xyaxes="0.83205 0.55470 0 -0.14825 0.22237 0.96362"/>
+            fovy="30"
+            xyaxes="0.83205 0.55470 0 -0.11300 0.16950 0.97900"/>
 
     <!-- Desired attitude: a translucent, slightly larger reference ghost. -->
     <body name="target" mocap="true" pos="0 0 1.25">
       <geom type="sphere" size="0.39" material="target"/>
-      <geom type="capsule" fromto="0 0 0 1.08 0 0" size="0.014" rgba="1 0.28 0.26 0.22"/>
-      <geom type="capsule" fromto="0 0 0 0 1.08 0" size="0.014" rgba="0.35 1 0.48 0.22"/>
-      <geom type="capsule" fromto="0 0 0 0 0 1.08" size="0.014" rgba="0.28 0.58 1 0.22"/>
+      <geom type="capsule" fromto="0 0 0 1.14 0 0" size="0.026" rgba="1 0.28 0.26 0.58"/>
+      <geom type="capsule" fromto="0 0 0 0 1.14 0" size="0.026" rgba="0.35 1 0.48 0.58"/>
+      <geom type="capsule" fromto="0 0 0 0 0 1.14" size="0.026" rgba="0.28 0.58 1 0.58"/>
     </body>
 
     <!-- Actual attitude, driven directly from the SO(3) solution. -->
@@ -222,8 +225,8 @@ def _annotate_frame(
     width, height = image.size
     scale = min(width / 960.0, height / 720.0)
     margin = int(24 * scale)
-    panel_width = int(520 * scale)
-    panel_height = int(204 * scale)
+    panel_width = int(320 * scale)
+    panel_height = int(44 * scale)
     panel_left = (width - panel_width) // 2
     panel_top = margin
     radius = int(16 * scale)
@@ -240,11 +243,9 @@ def _annotate_frame(
         width=max(1, int(1.5 * scale)),
     )
 
-    title_font = _font(int(29 * scale), bold=True)
-    body_font = _font(int(21 * scale))
-    small_font = _font(int(18 * scale))
-    x = panel_left + int(26 * scale)
-    y = panel_top + int(15 * scale)
+    title_font = _font(int(18 * scale), bold=True)
+    small_font = _font(int(15 * scale))
+    y = panel_top + int(10 * scale)
     panel_title = "SO(3) STABILIZATION"
     draw.text(
         (panel_left + panel_width // 2, y),
@@ -253,84 +254,75 @@ def _annotate_frame(
         fill=(238, 243, 250, 255),
         anchor="mt",
     )
-    divider_y = panel_top + int(61 * scale)
-    draw.line(
-        (
-            panel_left + int(24 * scale),
-            divider_y,
-            panel_left + panel_width - int(24 * scale),
-            divider_y,
-        ),
-        fill=(104, 119, 142, 90),
-        width=max(1, int(scale)),
-    )
 
-    y = panel_top + int(76 * scale)
-    draw.text(
-        (x, y), f"Time = {time:5.2f} s", font=body_font, fill=(221, 228, 239, 255)
-    )
-    mode_text = f"Mode q = {mode}"
-    mode_box = draw.textbbox((0, 0), mode_text, font=body_font)
-    draw.text(
+    status_width = int(224 * scale)
+    status_height = int(168 * scale)
+    status_left = margin
+    status_top = panel_top + panel_height + int(16 * scale)
+    draw.rounded_rectangle(
         (
-            panel_left + panel_width - int(26 * scale) - (mode_box[2] - mode_box[0]),
-            y,
+            status_left,
+            status_top,
+            status_left + status_width,
+            status_top + status_height,
         ),
-        mode_text,
-        font=body_font,
-        fill=(110, 231, 183, 255),
+        radius=int(14 * scale),
+        fill=(8, 12, 20, 205),
+        outline=(104, 119, 142, 125),
+        width=max(1, int(1.5 * scale)),
     )
-
-    y += int(36 * scale)
+    status_x = status_left + int(18 * scale)
+    status_y = status_top + int(13 * scale)
     draw.text(
-        (x, y),
-        f"Error {error_degrees:6.2f} deg",
-        font=body_font,
+        (status_x, status_y),
+        "ERROR",
+        font=small_font,
+        fill=(178, 190, 207, 255),
+    )
+    error_font = _font(int(36 * scale), bold=True)
+    status_y += int(22 * scale)
+    draw.text(
+        (status_x, status_y),
+        f"{error_degrees:.1f}°",
+        font=error_font,
+        fill=(238, 243, 250, 255),
+    )
+    status_y += int(52 * scale)
+    draw.text(
+        (status_x, status_y),
+        f"Time  {time:5.2f} s",
+        font=small_font,
         fill=(221, 228, 239, 255),
     )
-    y += int(32 * scale)
     draw.text(
-        (x, y),
-        f"Potential = {potential:7.4f}",
+        (status_left + status_width - int(18 * scale), status_y),
+        f"Mode = {mode}",
+        font=small_font,
+        fill=(238, 243, 250, 255),
+        anchor="rt",
+    )
+    status_y += int(29 * scale)
+    draw.text(
+        (status_x, status_y),
+        "DESIRED AXES",
         font=small_font,
         fill=(178, 190, 207, 255),
     )
-    gap_text = f"Synergy Gap = {gap:7.4f}"
-    gap_box = draw.textbbox((0, 0), gap_text, font=small_font)
-    draw.text(
+    axis_x = status_left + status_width - int(18 * scale)
+    for label, color in reversed(
         (
-            panel_left + panel_width - int(26 * scale) - (gap_box[2] - gap_box[0]),
-            y,
-        ),
-        gap_text,
-        font=small_font,
-        fill=(178, 190, 207, 255),
-    )
+            ("x*", (255, 77, 77, 255)),
+            ("y*", (110, 231, 183, 255)),
+            ("z*", (56, 189, 248, 255)),
+        )
+    ):
+        label_box = draw.textbbox((0, 0), label, font=small_font)
+        label_width = label_box[2] - label_box[0]
+        axis_x -= label_width
+        draw.text((axis_x, status_y), label, font=small_font, fill=color)
+        axis_x -= int(12 * scale)
     gain_text = "  ".join(
         f"Gain {i + 1} = {value:+.0f}" for i, value in enumerate(gains)
-    )
-
-    progress = (
-        1.0 if np.isclose(t_end, t_start) else (time - t_start) / (t_end - t_start)
-    )
-    bar_left = x
-    bar_right = panel_left + panel_width - int(26 * scale)
-    bar_top = panel_top + panel_height - int(18 * scale)
-    bar_height = max(3, int(6 * scale))
-    draw.rounded_rectangle(
-        (bar_left, bar_top, bar_right, bar_top + bar_height),
-        radius=bar_height,
-        fill=(62, 73, 91, 230),
-    )
-    draw.rounded_rectangle(
-        (
-            bar_left,
-            bar_top,
-            bar_left + int((bar_right - bar_left) * np.clip(progress, 0.0, 1.0)),
-            bar_top + bar_height,
-        ),
-        radius=bar_height,
-        fill=(56, 189, 248, 255),
     )
 
     gain_font = _font(int(20 * scale), bold=True)
@@ -402,7 +394,7 @@ def _draw_trajectory_panel(
     title_y = top + max(3, int(6 * scale))
     draw.text(
         (left + pad_x, title_y),
-        "BODY z-AXIS TRAJECTORY",
+        "BODY TRAJECTORY",
         font=title_font,
         fill=(221, 228, 239, 255),
     )
@@ -473,9 +465,7 @@ def _draw_trajectory_panel(
     cursor_x = int(
         round(
             plot_left
-            + (plot_right - plot_left)
-            * (times[frame_index] - times[0])
-            / time_span
+            + (plot_right - plot_left) * (times[frame_index] - times[0]) / time_span
         )
     )
     draw.line(

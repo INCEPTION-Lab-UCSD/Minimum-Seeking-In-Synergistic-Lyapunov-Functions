@@ -275,6 +275,9 @@ class SO3:
             self._project_so3(self._matrix(states[:9, index]))
             for index in range(frame_count)
         ]
+        # The animation tracks the body z-axis in inertial coordinates.  These
+        # are Cartesian components of the pointing direction, not all nine
+        # entries of the SO(3) attitude matrix.
         directions = np.vstack([attitude[:, 2] for attitude in attitudes])
         gains = np.vstack([self._get_control_gain(t) for t in times])
 
@@ -330,7 +333,7 @@ class SO3:
             ax_trajectory,
             times,
             directions,
-            (r"$r_{13}$", r"$r_{23}$", r"$r_{33}$"),
+            (r"$x$", r"$y$", r"$z$"),
             target_direction,
         )
         compact_control_panel(ax, ax_control, gains.shape[1])
