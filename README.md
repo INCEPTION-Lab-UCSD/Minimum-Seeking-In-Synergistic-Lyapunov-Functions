@@ -98,7 +98,7 @@ simulation.render_mujoco(solution, "Animations/my_so3_run.mp4", fps=30)
   volume={191},
   pages={113112},
   year={2026},
-  doi={[10.1016/j.automatica.2026.113112](https://doi.org/10.1016/j.automatica.2026.113112)}
+  doi={https://doi.org/10.1016/j.automatica.2026.113112}
 }
 ```
 
